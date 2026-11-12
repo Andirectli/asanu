@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -17,7 +18,7 @@ import (
 	"time"
 )
 
-const appVersion = "0.2.0"
+const appVersion = "0.2.1"
 
 func env(k, def string) string {
 	if v := os.Getenv(k); v != "" {
@@ -161,7 +162,30 @@ func userCmd(cmd string, args []string) error {
 }
 
 // backup writes a consistent snapshot while the server keeps running.
+// target "-" streams it to stdout (docker exec … backup - > file), using a temp file in the data dir.
 func backup(target string) error {
+	if target == "-" {
+		tmp := filepath.Join(filepath.Dir(dbPath()), fmt.Sprintf(".backup-%d.db", os.Getpid()))
+		defer os.Remove(tmp)
+		if err := backupTo(tmp); err != nil {
+			return err
+		}
+		f, err := os.Open(tmp)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = io.Copy(os.Stdout, f)
+		return err
+	}
+	if err := backupTo(target); err != nil {
+		return err
+	}
+	fmt.Println("backup written to", target)
+	return nil
+}
+
+func backupTo(target string) error {
 	if _, err := os.Stat(target); err == nil {
 		return fmt.Errorf("%s already exists", target)
 	}
@@ -174,9 +198,5 @@ func backup(target string) error {
 		return err
 	}
 	// contains password hashes and session hashes: owner-only
-	if err := os.Chmod(target, 0o600); err != nil {
-		return err
-	}
-	fmt.Println("backup written to", target)
-	return nil
+	return os.Chmod(target, 0o600)
 }

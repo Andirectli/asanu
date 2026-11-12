@@ -1,36 +1,26 @@
-# Asanu server for ZimaOS ("App Store → + → Install a customized app → Import → Docker Compose").
-# Prerequisites (see docs/ZIMAOS.md): ZimaOS is logged in to ghcr.io once
-# (sudo docker login ghcr.io -u Andirectli) and /DATA/AppData/asanu/data exists,
-# owned by UID 65532 (chown -R 65532:65532). Works on amd64 and arm64.
+# Asanu server for ZimaOS: App Store → "+" → Install a customized app → YAML → paste → Install.
+# Only change the three ASANU_INIT_* values below. Nothing to prepare on the server.
 name: asanu
 services:
   asanu:
-    image: ghcr.io/andirectli/asanu-server:0.2.0
+    image: ghcr.io/andirectli/asanu-server:0.2.1   # update = raise the version
     container_name: asanu
     restart: unless-stopped
-    pull_policy: missing          # private image from GitHub; update = change the version tag
     ports:
-      - "8380:8080"               # host port left side: change freely (not 80/443)
+      - "8380:8080"               # left side = port on ZimaOS, change if taken (not 80/443)
     volumes:
-      - type: bind
-        source: /DATA/AppData/asanu/data
-        target: /data
+      - asanu-data:/data          # Docker volume: created automatically with the right owner
     environment:
-      ASANU_DATA_DIR: /data
-      ASANU_ADDR: ":8080"
       TZ: Europe/Berlin
-      # First start only: creates the first account if the database has no users.
-      # Remove both lines after the first successful login.
+      # First start only: creates your account. Password: at least 10 characters.
       ASANU_INIT_EMAIL: "ich@example.lan"
       ASANU_INIT_PASSWORD: "bitte-sofort-aendern-123"
       ASANU_INIT_NAME: "Ich"
-    user: "65532:65532"
     read_only: true
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
     mem_limit: 256m
-    memswap_limit: 256m
     cpus: 0.50
     pids_limit: 64
     healthcheck:
@@ -44,3 +34,6 @@ services:
       options:
         max-size: "5m"
         max-file: "2"
+
+volumes:
+  asanu-data:

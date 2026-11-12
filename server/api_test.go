@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -378,5 +379,34 @@ func TestMigrationFromV1KeepsData(t *testing.T) {
 	tk, err := getTask(db, 1)
 	if err != nil || tk.Title != "alte Aufgabe" || tk.AssigneeID != nil || tk.Status != "" {
 		t.Fatalf("migrated task: %+v %v", tk, err)
+	}
+}
+
+func TestBackupToStdout(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ASANU_DATA_DIR", dir)
+	_, stop := setup(t, dbPath())
+	defer stop()
+	out := filepath.Join(dir, "stream.db")
+	f, _ := os.Create(out)
+	old := os.Stdout
+	os.Stdout = f
+	err := backup("-")
+	os.Stdout = old
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := openDB(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("streamed backup: %d %v", n, err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, ".backup-*")); len(left) != 0 {
+		t.Fatalf("temp file left: %v", left)
 	}
 }
