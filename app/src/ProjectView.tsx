@@ -481,5 +481,5 @@ function exportCsv(board: Board, users: Map<number, { name: string }>, toast: (t
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
   navigator.clipboard?.writeText(csv).catch(() => {});
-  toast(`CSV exportiert (${board.tasks.length} Aufgaben) und in die Zwischenablage kopiert.`, 'info');
+  toast(`CSV mit ${board.tasks.length} Aufgaben in die Zwischenablage kopiert (in Numbers/Excel einfügen).`, 'info');
 }
