@@ -1,0 +1,29 @@
+[package]
+name = "asanu"
+version = "0.2.0"
+description = "Asanu – self-hosted project management"
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "asanu_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+
+# OS keystore: macOS Keychain now, Windows Credential Manager later from the same code
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", features = ["apple-native"] }
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6", features = ["windows-native"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

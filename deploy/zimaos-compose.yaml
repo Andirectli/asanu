@@ -1,0 +1,45 @@
+# Asanu server for ZimaOS ("App Store → + → Install a customized app → Import → Docker Compose").
+# Prerequisite: image asanu-server:0.2.0 is loaded on ZimaOS (see docs/ZIMAOS.md) and
+# /DATA/AppData/asanu/data exists and belongs to UID 65532 (chown -R 65532:65532).
+name: asanu
+services:
+  asanu:
+    image: asanu-server:0.2.0
+    container_name: asanu
+    restart: unless-stopped
+    pull_policy: never            # local image only, no registry
+    ports:
+      - "8380:8080"               # host port left side: change freely (not 80/443)
+    volumes:
+      - type: bind
+        source: /DATA/AppData/asanu/data
+        target: /data
+    environment:
+      ASANU_DATA_DIR: /data
+      ASANU_ADDR: ":8080"
+      TZ: Europe/Berlin
+      # First start only: creates the first account if the database has no users.
+      # Remove both lines after the first successful login.
+      ASANU_INIT_EMAIL: "ich@example.lan"
+      ASANU_INIT_PASSWORD: "bitte-sofort-aendern-123"
+      ASANU_INIT_NAME: "Ich"
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.50
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD", "/asanu-server", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

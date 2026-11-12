@@ -1,0 +1,11 @@
+node_modules/
+app/dist/
+app/src-tauri/target/
+app/src-tauri/gen/
+server/asanu-server-linux-*
+server/dev-data/
+*.tar.gz
+*.db
+*.db-wal
+*.db-shm
+.DS_Store

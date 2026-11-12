@@ -1,0 +1,10 @@
+# Variant without a Go toolchain: wraps a binary cross-compiled on the Mac
+# (make linux-amd64). Build it on ZimaOS with: docker build -f Dockerfile.prebuilt -t asanu-server:0.2.0 .
+FROM scratch
+COPY asanu-server-linux-amd64 /asanu-server
+USER 65532:65532
+ENV ASANU_DATA_DIR=/data ASANU_ADDR=:8080
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/asanu-server", "health"]
+ENTRYPOINT ["/asanu-server"]
+CMD ["serve"]
