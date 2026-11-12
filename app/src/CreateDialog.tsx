@@ -11,6 +11,7 @@ export function CreateDialog({ projectId, onClose, dueDate: initialDue = '' }: {
   const [sections, setSections] = useState<Section[]>([]);
   const [sid, setSid] = useState(0);
   const [mine, setMine] = useState(true);
+  const [milestone, setMilestone] = useState(false);
   const [due, setDue] = useState(initialDue);
   const [busy, setBusy] = useState(false);
 
@@ -40,7 +41,7 @@ export function CreateDialog({ projectId, onClose, dueDate: initialDue = '' }: {
     e.preventDefault();
     if (!title.trim() || !sid || busy) return;
     setBusy(true);
-    const t = await run(api.createTask({ projectId: pid, sectionId: sid, title: title.trim() }));
+    const t = await run(api.createTask({ projectId: pid, sectionId: sid, title: title.trim(), kind: milestone ? 'milestone' : 'task' }));
     if (!t) return setBusy(false); // keep the dialog and the typed title
     if (mine || due) {
       const ok = await run(api.updateTask(t, { ...(mine ? { assigneeId: user.id } : {}), ...(due ? { dueDate: due } : {}) }));
@@ -91,6 +92,9 @@ export function CreateDialog({ projectId, onClose, dueDate: initialDue = '' }: {
           </label>
           <label className="check-line">
             <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Mir zuweisen
+          </label>
+          <label className="check-line">
+            <input type="checkbox" checked={milestone} onChange={(e) => setMilestone(e.target.checked)} /> Als Meilenstein
           </label>
         </div>
         <div className="row gap modal-actions">

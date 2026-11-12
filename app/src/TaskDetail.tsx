@@ -284,6 +284,20 @@ export function TaskDetailPane({ taskId }: { taskId: number }) {
               {t.status ? <StatusPill s={t.status} /> : <span className="muted">—</span>}
             </HoverSelect>
           </dd>
+          <dt>Art</dt>
+          <dd>
+            <HoverSelect
+              label="Art der Aufgabe"
+              value={t.kind}
+              onChange={(v) => save({ kind: v as Task['kind'] })}
+              options={[
+                { value: 'task', label: 'Aufgabe' },
+                { value: 'milestone', label: 'Meilenstein' },
+              ]}
+            >
+              <span>{t.kind === 'milestone' ? '◆ Meilenstein' : 'Aufgabe'}</span>
+            </HoverSelect>
+          </dd>
           <dt>Labels</dt>
           <dd className="row gap wrap anchor">
             {t.labelIds.map((id) => {
