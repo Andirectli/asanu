@@ -1,6 +1,6 @@
 import type { DropResult } from '@hello-pangea/dnd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BsArchive, BsBoxArrowUpLeft, BsStar, BsStarFill } from 'react-icons/bs';
+import { BsArchive, BsArrowDown, BsArrowUp, BsBoxArrowUpLeft, BsCopy, BsDownload, BsThreeDots, BsStar, BsStarFill } from 'react-icons/bs';
 import { ApiError, type Board, type Section, type Task } from './api';
 import { BoardView } from './BoardView';
 import { CalendarView } from './CalendarView';
@@ -13,13 +13,41 @@ import { ColorGrid, dueState, IconGrid, InlineEdit, Popover, PRIORITIES, Project
 
 export type Filter = { status: 'open' | 'done' | 'all'; priority: string; label: number; due: '' | 'overdue' | 'today' | 'week' | 'none'; assignee: '' | 'me' | 'none' };
 const defaultFilter: Filter = { status: 'open', priority: '', label: 0, due: '', assignee: '' };
-export type Sort = 'manual' | 'due' | 'priority' | 'title';
+export type Sort = 'manual' | 'start' | 'due' | 'assignee' | 'created' | 'updated' | 'completed' | 'priority' | 'status' | 'title';
+export const SORTS: [Sort, string][] = [
+  ['manual', 'Manuell'],
+  ['start', 'Startdatum'],
+  ['due', 'Fälligkeitsdatum'],
+  ['assignee', 'Verantwortlich'],
+  ['created', 'Erstellt am'],
+  ['updated', 'Zuletzt geändert am'],
+  ['completed', 'Erledigt am'],
+  ['priority', 'Priorität'],
+  ['status', 'Status'],
+  ['title', 'Alphabetisch'],
+];
+export type GroupBy = 'section' | 'assignee' | 'priority' | 'status' | 'due' | 'none';
+export const GROUPS: [GroupBy, string][] = [
+  ['section', 'Abschnitt'],
+  ['assignee', 'Verantwortlich'],
+  ['priority', 'Priorität'],
+  ['status', 'Status'],
+  ['due', 'Fälligkeit'],
+  ['none', 'Keine'],
+];
+export type Cols = { assignee: boolean; due: boolean; prio: boolean; status: boolean; labels: boolean };
+export const defaultCols: Cols = { assignee: true, due: true, prio: true, status: true, labels: true };
+export type Group = { key: string; label: string; tasks: Task[] };
+const STATUS_RANK: Record<string, number> = { on_track: 0, at_risk: 1, off_track: 2, '': 3 };
 const PRIO_RANK: Record<string, number> = { high: 0, medium: 1, low: 2, '': 3 };
 
 export type BoardModel = {
   board: Board;
   bySection: Map<number, Task[]>;
-  sorted: boolean; // drag & drop is only meaningful in manual order
+  sorted: boolean; // drag & drop is only meaningful in manual order and plain sections
+  groups: Group[] | null; // set when grouped by something other than sections
+  cols: Cols;
+  setDates: (t: Task, startDate: string, dueDate: string) => Promise<boolean>;
   subCounts: Map<number, { total: number; done: number }>;
   onDragEnd: (r: DropResult) => void;
   addTask: (sectionId: number, title: string) => Promise<boolean>;
@@ -49,7 +77,27 @@ function matches(t: Task, f: Filter, me: number): boolean {
 
 export function ProjectView({ projectId, view }: { projectId: number; view: ProjectTab }) {
   const { api, run, toast, go, reloadProjects, labels, user, create } = useApp();
+  const { users } = useApp();
   const [sort, setSort] = useState<Sort>('manual');
+  const [desc, setDesc] = useState(false);
+  const [groupBy, setGroupBy] = useState<GroupBy>('section');
+  const [colsOpen, setColsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [cols, setCols] = useState<Cols>(() => {
+    try {
+      return { ...defaultCols, ...JSON.parse(localStorage.getItem(`asanu-cols-${projectId}`) || '{}') };
+    } catch {
+      return defaultCols;
+    }
+  });
+  const saveCols = (c: Cols) => {
+    setCols(c);
+    try {
+      localStorage.setItem(`asanu-cols-${projectId}`, JSON.stringify(c));
+    } catch {
+      /* the choice just won't persist */
+    }
+  };
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<Filter>(defaultFilter);
@@ -113,13 +161,54 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
         subCounts.set(t.parentId, c);
       } else if (t.sectionId && matches(t, filter, user.id)) bySection.get(t.sectionId)?.push(t);
     }
+    const name = (t: Task) => (t.assigneeId ? (users.get(t.assigneeId)?.name ?? '') : '\uffff');
+    const dir = desc ? -1 : 1;
+    const base = (a: Task, b: Task) => a.position - b.position;
     const cmp: Record<Sort, (a: Task, b: Task) => number> = {
-      manual: (a, b) => a.position - b.position,
-      due: (a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999') || a.position - b.position,
-      priority: (a, b) => PRIO_RANK[a.priority] - PRIO_RANK[b.priority] || a.position - b.position,
-      title: (a, b) => a.title.localeCompare(b.title, 'de'),
+      manual: base,
+      start: (a, b) => dir * (a.startDate || '9999').localeCompare(b.startDate || '9999') || base(a, b),
+      due: (a, b) => dir * (a.dueDate || '9999').localeCompare(b.dueDate || '9999') || base(a, b),
+      assignee: (a, b) => dir * name(a).localeCompare(name(b), 'de') || base(a, b),
+      created: (a, b) => dir * a.createdAt.localeCompare(b.createdAt) || base(a, b),
+      updated: (a, b) => dir * a.updatedAt.localeCompare(b.updatedAt) || base(a, b),
+      completed: (a, b) => dir * (a.completedAt || '9999').localeCompare(b.completedAt || '9999') || base(a, b),
+      priority: (a, b) => dir * (PRIO_RANK[a.priority] - PRIO_RANK[b.priority]) || base(a, b),
+      status: (a, b) => dir * (STATUS_RANK[a.status] - STATUS_RANK[b.status]) || base(a, b),
+      title: (a, b) => dir * a.title.localeCompare(b.title, 'de'),
     };
     for (const list of bySection.values()) list.sort(cmp[sort]);
+
+    let groups: Group[] | null = null;
+    if (groupBy !== 'section') {
+      const flat = [...bySection.values()].flat().sort(cmp[sort]);
+      const today = new Date().toLocaleDateString('sv-SE');
+      const weekEnd = new Date(Date.now() + 7 * 86400000).toLocaleDateString('sv-SE');
+      const def: { key: string; label: string; of: (t: Task) => boolean }[] =
+        groupBy === 'none'
+          ? [{ key: 'all', label: 'Alle Aufgaben', of: () => true }]
+          : groupBy === 'priority'
+            ? [...PRIORITIES.filter((x) => x.value).reverse().map((x) => ({ key: x.value, label: x.label, of: (t: Task) => t.priority === x.value })), { key: 'none', label: 'Keine Priorität', of: (t: Task) => !t.priority }]
+            : groupBy === 'status'
+              ? [
+                  { key: 'on_track', label: 'Planmäßig', of: (t: Task) => t.status === 'on_track' },
+                  { key: 'at_risk', label: 'Gefährdet', of: (t: Task) => t.status === 'at_risk' },
+                  { key: 'off_track', label: 'Unplanmäßig', of: (t: Task) => t.status === 'off_track' },
+                  { key: 'none', label: 'Kein Status', of: (t: Task) => !t.status },
+                ]
+              : groupBy === 'due'
+                ? [
+                    { key: 'overdue', label: 'Überfällig', of: (t: Task) => !!t.dueDate && t.dueDate < today },
+                    { key: 'today', label: 'Heute', of: (t: Task) => t.dueDate === today },
+                    { key: 'week', label: 'Nächste 7 Tage', of: (t: Task) => !!t.dueDate && t.dueDate > today && t.dueDate <= weekEnd },
+                    { key: 'later', label: 'Später', of: (t: Task) => !!t.dueDate && t.dueDate > weekEnd },
+                    { key: 'none', label: 'Kein Datum', of: (t: Task) => !t.dueDate },
+                  ]
+                : [
+                    ...[...users.values()].sort((a, b) => (a.id === user.id ? -1 : b.id === user.id ? 1 : a.name.localeCompare(b.name, 'de'))).map((u) => ({ key: `u${u.id}`, label: u.id === user.id ? `${u.name} (ich)` : u.name, of: (t: Task) => t.assigneeId === u.id })),
+                    { key: 'none', label: 'Nicht zugewiesen', of: (t: Task) => !t.assigneeId },
+                  ];
+      groups = def.map((g) => ({ key: g.key, label: g.label, tasks: flat.filter(g.of) })).filter((g) => g.tasks.length > 0 || groupBy === 'none');
+    }
 
     const onDragEnd = async ({ draggableId, source, destination }: DropResult) => {
       if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) return;
@@ -142,7 +231,14 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
     return {
       board,
       bySection,
-      sorted: sort !== 'manual',
+      sorted: sort !== 'manual' || groupBy !== 'section',
+      groups,
+      cols,
+      setDates: async (t, startDate, dueDate) => {
+        const ok = !!(await run(api.updateTask(t, { startDate, dueDate })));
+        load();
+        return ok;
+      },
       subCounts,
       onDragEnd,
       addTask: async (sectionId, title) => !!(await run(api.createTask({ projectId, sectionId, title }))) && (load(), true),
@@ -166,7 +262,7 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
         if (await run(api.deleteSection(s))) load();
       },
     };
-  }, [board, filter, sort, api, run, load, projectId, toast, user.id]);
+  }, [board, filter, sort, desc, groupBy, cols, users, api, run, load, projectId, toast, user.id]);
 
   if (error && !board) return <div className="empty-state">{error}</div>;
   if (!board || !model) return <div className="empty-state muted">Lade …</div>;
@@ -226,9 +322,48 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
           </button>
           {p.archived && <span className="pill archived-pill">Archiviert</span>}
           <span className="spacer" />
-          <button type="button" className="btn small" onClick={() => updateProject({ archived: !p.archived })}>
-            {p.archived ? <BsBoxArrowUpLeft /> : <BsArchive />} {p.archived ? 'Wiederherstellen' : 'Archivieren'}
-          </button>
+          <div className="anchor">
+            <button type="button" className="icon-btn" aria-haspopup="menu" aria-expanded={menuOpen} aria-label="Projektaktionen" title="Aktionen" onClick={() => setMenuOpen((o) => !o)}>
+              <BsThreeDots />
+            </button>
+            <Popover open={menuOpen} onClose={() => setMenuOpen(false)} align="right">
+              <button
+                type="button"
+                className="menu-line"
+                onClick={async () => {
+                  setMenuOpen(false);
+                  const cp = await run(api.duplicateProject(p.id));
+                  if (cp) {
+                    await reloadProjects();
+                    toast(`„${cp.name}" angelegt`, 'info');
+                    go({ page: 'project', projectId: cp.id, view });
+                  }
+                }}
+              >
+                <BsCopy /> Projekt duplizieren
+              </button>
+              <button
+                type="button"
+                className="menu-line"
+                onClick={() => {
+                  setMenuOpen(false);
+                  exportCsv(board, users, toast);
+                }}
+              >
+                <BsDownload /> Als CSV exportieren
+              </button>
+              <button
+                type="button"
+                className="menu-line"
+                onClick={() => {
+                  setMenuOpen(false);
+                  updateProject({ archived: !p.archived });
+                }}
+              >
+                {p.archived ? <BsBoxArrowUpLeft /> : <BsArchive />} {p.archived ? 'Wiederherstellen' : 'Archivieren'}
+              </button>
+            </Popover>
+          </div>
         </div>
         <div className="tabs" role="tablist">
           <a role="tab" aria-selected={view === 'overview'} className={view === 'overview' ? 'active' : ''} href={`#/project/${p.id}/overview`} title={`${modKey}0`}>
@@ -262,8 +397,39 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
         <FilterSelect label="Label" value={String(filter.label)} onChange={(v) => setFilter({ ...filter, label: Number(v) })} options={[['0', 'Alle'], ...[...labels.values()].map((l) => [String(l.id), l.name] as [string, string])]} />
         <FilterSelect label="Verantwortlich" value={filter.assignee} onChange={(v) => setFilter({ ...filter, assignee: v as Filter['assignee'] })} options={[['', 'Alle'], ['me', 'Ich'], ['none', 'Niemand']]} />
         <FilterSelect label="Fällig" value={filter.due} onChange={(v) => setFilter({ ...filter, due: v as Filter['due'] })} options={[['', 'Egal'], ['overdue', 'Überfällig'], ['today', 'Bis heute'], ['week', 'Nächste 7 Tage'], ['none', 'Ohne Datum']]} />
+        {view === 'list' && <FilterSelect label="Gruppieren" value={groupBy} onChange={(v) => setGroupBy(v as GroupBy)} options={GROUPS} />}
         {(view === 'list' || view === 'board') && (
-          <FilterSelect label="Sortieren" value={sort} onChange={(v) => setSort(v as Sort)} options={[['manual', 'Manuell'], ['due', 'Fälligkeit'], ['priority', 'Priorität'], ['title', 'Name']]} />
+          <>
+            <FilterSelect label="Sortieren" value={sort} onChange={(v) => setSort(v as Sort)} options={SORTS} />
+            {sort !== 'manual' && (
+              <button type="button" className="icon-btn" aria-label={desc ? 'Absteigend sortiert' : 'Aufsteigend sortiert'} title={desc ? 'Absteigend' : 'Aufsteigend'} onClick={() => setDesc(!desc)}>
+                {desc ? <BsArrowDown /> : <BsArrowUp />}
+              </button>
+            )}
+          </>
+        )}
+        {view === 'list' && (
+          <div className="anchor">
+            <button type="button" className="filter" aria-haspopup="menu" aria-expanded={colsOpen} onClick={() => setColsOpen((o) => !o)}>
+              Spalten
+            </button>
+            <Popover open={colsOpen} onClose={() => setColsOpen(false)} align="right">
+              <div className="popover-title">Spalten anzeigen</div>
+              {(
+                [
+                  ['assignee', 'Verantwortlich'],
+                  ['due', 'Fälligkeitsdatum'],
+                  ['prio', 'Priorität'],
+                  ['status', 'Status'],
+                  ['labels', 'Labels'],
+                ] as [keyof Cols, string][]
+              ).map(([k, l]) => (
+                <label key={k} className="check-line">
+                  <input type="checkbox" checked={cols[k]} onChange={() => saveCols({ ...cols, [k]: !cols[k] })} /> {l}
+                </label>
+              ))}
+            </Popover>
+          </div>
         )}
         {JSON.stringify(filter) !== JSON.stringify(defaultFilter) && (
           <button type="button" className="btn link small" onClick={() => setFilter(defaultFilter)}>
@@ -277,9 +443,9 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
   );
 }
 
-function FilterSelect({ label, value, options, onChange }: { label: string; value: string; options: [string, string][]; onChange: (v: string) => void }) {
+function FilterSelect({ label, value, options, onChange }: { label: string; value: string; options: readonly (readonly [string, string])[]; onChange: (v: string) => void }) {
   return (
-    <label className={`filter ${value && value !== '0' && !(label === 'Status' && value === 'open') && !(label === 'Sortieren' && value === 'manual') ? 'active' : ''}`}>
+    <label className={`filter ${value && value !== '0' && !(label === 'Status' && value === 'open') && !(label === 'Sortieren' && value === 'manual') && !(label === 'Gruppieren' && value === 'section') ? 'active' : ''}`}>
       {label}:
       <select value={value} onChange={(e) => onChange(e.target.value)}>
         {options.map(([v, l]) => (
@@ -290,4 +456,30 @@ function FilterSelect({ label, value, options, onChange }: { label: string; valu
       </select>
     </label>
   );
+}
+
+const csvCell = (v: string | number | boolean | null | undefined) => {
+  let t = String(v ?? '');
+  if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`; // spreadsheet formula injection
+  return `"${t.replaceAll('"', '""')}"`;
+};
+
+/** CSV for spreadsheets (semicolon + BOM so Excel/Numbers open umlauts correctly). */
+function exportCsv(board: Board, users: Map<number, { name: string }>, toast: (t: string, k?: 'error' | 'info') => void) {
+  const sec = new Map(board.sections.map((s) => [s.id, s.name]));
+  const byId = new Map(board.tasks.map((t) => [t.id, t]));
+  const rows = [['Abschnitt', 'Aufgabe', 'Unteraufgabe von', 'Art', 'Verantwortlich', 'Startdatum', 'Fälligkeitsdatum', 'Priorität', 'Status', 'Erledigt', 'Beschreibung']];
+  for (const t of board.tasks) {
+    const parent = t.parentId ? byId.get(t.parentId) : undefined;
+    rows.push([sec.get(t.sectionId ?? parent?.sectionId ?? 0) ?? '', t.title, parent?.title ?? '', t.kind === 'milestone' ? 'Meilenstein' : 'Aufgabe', t.assigneeId ? (users.get(t.assigneeId)?.name ?? '') : '', t.startDate, t.dueDate, t.priority, t.status, t.completed ? 'ja' : 'nein', t.description]);
+  }
+  const csv = `\ufeff${rows.map((r) => r.map(csvCell).join(';')).join('\r\n')}`;
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${board.project.name.replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'Projekt'}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  navigator.clipboard?.writeText(csv).catch(() => {});
+  toast(`CSV exportiert (${board.tasks.length} Aufgaben) und in die Zwischenablage kopiert.`, 'info');
 }

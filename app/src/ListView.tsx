@@ -6,23 +6,48 @@ import { useApp } from './ctx';
 import type { BoardModel } from './ProjectView';
 import { Avatar, CheckCircle, DueText, InlineEdit, LabelPills, PriorityPill, StatusPill } from './ui';
 
+const COL_W = { assignee: '84px', due: '120px', prio: '92px', status: '96px', labels: 'minmax(110px, 200px)' } as const;
+
 export function ListView({ m }: { m: BoardModel }) {
+  const template = ['minmax(240px, 1fr)', ...(Object.keys(COL_W) as (keyof typeof COL_W)[]).filter((k) => m.cols[k]).map((k) => COL_W[k])].join(' ');
   return (
-    <div className="list-view">
+    <div className="list-view" style={{ '--cols': template } as React.CSSProperties}>
       <div className="list-head">
         <span className="col-title">Aufgabenname</span>
-        <span>Verantwortlich</span>
-        <span className="col-due">Fällig</span>
-        <span className="col-prio">Priorität</span>
-        <span>Status</span>
-        <span className="col-labels">Labels</span>
+        {m.cols.assignee && <span>Verantwortlich</span>}
+        {m.cols.due && <span className="col-due">Fällig</span>}
+        {m.cols.prio && <span className="col-prio">Priorität</span>}
+        {m.cols.status && <span>Status</span>}
+        {m.cols.labels && <span className="col-labels">Labels</span>}
       </div>
-      <DragDropContext onDragEnd={m.onDragEnd}>
-        {m.board.sections.map((s, i) => (
-          <SectionBlock key={s.id} s={s} tasks={m.bySection.get(s.id) ?? []} m={m} first={i === 0} />
-        ))}
-      </DragDropContext>
-      <AddSection m={m} />
+      {m.groups ? (
+        m.groups.map((g) => (
+          <section key={g.key} className="section">
+            <div className="section-head">
+              <span className="section-name" style={{ paddingLeft: 8 }}>
+                {g.label}
+              </span>
+              <span className="muted small">{g.tasks.length}</span>
+            </div>
+            <div className="rows">
+              {g.tasks.map((t) => (
+                <div key={t.id} className="row-wrap">
+                  <TaskRow t={t} m={m} handle={null} />
+                </div>
+              ))}
+            </div>
+          </section>
+        ))
+      ) : (
+        <>
+          <DragDropContext onDragEnd={m.onDragEnd}>
+            {m.board.sections.map((s, i) => (
+              <SectionBlock key={s.id} s={s} tasks={m.bySection.get(s.id) ?? []} m={m} first={i === 0} />
+            ))}
+          </DragDropContext>
+          <AddSection m={m} />
+        </>
+      )}
     </div>
   );
 }
@@ -80,11 +105,11 @@ function TaskRow({ t, m, handle }: { t: Task; m: BoardModel; handle: React.HTMLA
       tabIndex={0}
       aria-label={`Aufgabe ${t.title} öffnen`}
     >
-      <span className="grip" {...handle} aria-label="Ziehen zum Verschieben">
+      <span className="grip" {...(handle ?? {})} aria-label={handle ? 'Ziehen zum Verschieben' : undefined} aria-hidden={handle ? undefined : true} style={handle ? undefined : { visibility: 'hidden' }}>
         <BsGripVertical />
       </span>
       <span className="col-title">
-        <CheckCircle done={t.completed} onToggle={() => m.toggle(t)} label={t.completed ? 'Als offen markieren' : 'Als erledigt markieren'} />
+        <CheckCircle done={t.completed} diamond={t.kind === 'milestone'} onToggle={() => m.toggle(t)} label={t.completed ? 'Als offen markieren' : t.kind === 'milestone' ? 'Meilenstein erreicht' : 'Als erledigt markieren'} />
         {/* stopPropagation: editing the title must not open the detail pane */}
         <span className="title-edit" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
           <InlineEdit value={t.title} ariaLabel="Aufgabentitel" onSave={(v) => m.renameTask(t, v)} />
@@ -105,19 +130,27 @@ function TaskRow({ t, m, handle }: { t: Task; m: BoardModel; handle: React.HTMLA
           </span>
         )}
       </span>
-      <span>{t.assigneeId && <Avatar user={users.get(t.assigneeId)} size={22} />}</span>
-      <span className="col-due">
-        <DueText t={t} />
-      </span>
-      <span className="col-prio">
-        <PriorityPill p={t.priority} />
-      </span>
-      <span>
-        <StatusPill s={t.status} />
-      </span>
-      <span className="col-labels">
-        <LabelPills ids={t.labelIds} labels={labels} />
-      </span>
+      {m.cols.assignee && <span>{t.assigneeId && <Avatar user={users.get(t.assigneeId)} size={22} />}</span>}
+      {m.cols.due && (
+        <span className="col-due">
+          <DueText t={t} />
+        </span>
+      )}
+      {m.cols.prio && (
+        <span className="col-prio">
+          <PriorityPill p={t.priority} />
+        </span>
+      )}
+      {m.cols.status && (
+        <span>
+          <StatusPill s={t.status} />
+        </span>
+      )}
+      {m.cols.labels && (
+        <span className="col-labels">
+          <LabelPills ids={t.labelIds} labels={labels} />
+        </span>
+      )}
     </div>
   );
 }

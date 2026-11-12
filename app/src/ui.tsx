@@ -108,11 +108,11 @@ export function HoverSelect({ value, options, onChange, label, children }: { val
   );
 }
 
-export function CheckCircle({ done, onToggle, size = 16, label }: { done: boolean; onToggle: () => void; size?: number; label: string }) {
+export function CheckCircle({ done, onToggle, size = 16, label, diamond = false }: { done: boolean; onToggle: () => void; size?: number; label: string; diamond?: boolean }) {
   return (
     <button
       type="button"
-      className={`check ${done ? 'done' : ''}`}
+      className={`check ${done ? 'done' : ''} ${diamond ? 'diamond' : ''}`}
       style={{ width: size, height: size }}
       aria-label={label}
       aria-pressed={done}

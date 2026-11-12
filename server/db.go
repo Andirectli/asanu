@@ -115,6 +115,8 @@ var migrations = []string{
 		project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 		PRIMARY KEY (user_id, project_id)
 	);`,
+	// v0.6: task kind (task | milestone)
+	`ALTER TABLE tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'task';`,
 }
 
 func openDB(path string) (*sql.DB, error) {

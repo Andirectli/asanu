@@ -633,3 +633,69 @@ func TestCORSPreflightAllowsEveryUsedMethod(t *testing.T) {
 		}
 	}
 }
+
+func TestMilestonesAndDuplicateProject(t *testing.T) {
+	srv, stop := setup(t, filepath.Join(t.TempDir(), "asanu.db"))
+	defer stop()
+	c := &client{t: t, base: srv.URL}
+	c.login("me@home.lan", "correct-horse-1")
+	var me User
+	c.do("GET", "/api/me", nil, &me)
+	var p Project
+	c.do("POST", "/api/projects", map[string]string{"name": "Orig", "color": "#f06a6a"}, &p)
+	c.do("PATCH", fmt.Sprintf("/api/projects/%d", p.ID), map[string]any{"version": p.Version, "icon": "rocket", "description": "Beschr"}, &p)
+	var b struct{ Sections []Section }
+	c.do("GET", fmt.Sprintf("/api/projects/%d/board", p.ID), nil, &b)
+	var ms, plain, sub Task
+	if code := c.do("POST", "/api/tasks", map[string]any{"projectId": p.ID, "sectionId": b.Sections[0].ID, "title": "Release", "kind": "milestone"}, &ms); code != 201 || ms.Kind != "milestone" || ms.CreatedAt == "" {
+		t.Fatalf("milestone: %d %+v", code, ms)
+	}
+	if code := c.do("POST", "/api/tasks", map[string]any{"projectId": p.ID, "sectionId": b.Sections[0].ID, "title": "x", "kind": "approval"}, nil); code != 400 {
+		t.Fatalf("unknown kind accepted: %d", code)
+	}
+	c.do("POST", "/api/tasks", map[string]any{"projectId": p.ID, "sectionId": b.Sections[1].ID, "title": "Aufgabe"}, &plain)
+	c.do("PATCH", fmt.Sprintf("/api/tasks/%d", plain.ID), map[string]any{"version": plain.Version, "assigneeId": me.ID, "priority": "high", "dueDate": "2026-12-24", "completed": true}, &plain)
+	c.do("POST", "/api/tasks", map[string]any{"parentId": plain.ID, "title": "Teil"}, &sub)
+	var lbl Label
+	c.do("POST", "/api/labels", map[string]string{"name": "L", "color": "#4ecbc4"}, &lbl)
+	c.do("PATCH", fmt.Sprintf("/api/tasks/%d", plain.ID), map[string]any{"version": plain.Version, "labelIds": []int64{lbl.ID}}, &plain)
+	c.do("POST", fmt.Sprintf("/api/tasks/%d/comments", plain.ID), map[string]string{"body": "bleibt im Original"}, nil)
+
+	var cp Project
+	if code := c.do("POST", fmt.Sprintf("/api/projects/%d/duplicate", p.ID), nil, &cp); code != 201 || cp.Name != "Orig (Kopie)" || cp.Icon != "rocket" || cp.Description != "Beschr" || cp.ID == p.ID {
+		t.Fatalf("duplicate: %d %+v", code, cp)
+	}
+	var cb struct {
+		Sections []Section
+		Tasks    []Task
+	}
+	c.do("GET", fmt.Sprintf("/api/projects/%d/board", cp.ID), nil, &cb)
+	if len(cb.Sections) != 3 || len(cb.Tasks) != 3 {
+		t.Fatalf("copy has %d sections, %d tasks", len(cb.Sections), len(cb.Tasks))
+	}
+	found := map[string]Task{}
+	for _, tk := range cb.Tasks {
+		found[tk.Title] = tk
+		if tk.ProjectID != cp.ID || tk.Completed {
+			t.Fatalf("copied task must belong to the copy and start open: %+v", tk)
+		}
+	}
+	a, tl := found["Aufgabe"], found["Teil"]
+	if a.Priority != "high" || a.DueDate != "2026-12-24" || a.AssigneeID == nil || len(a.LabelIDs) != 1 || found["Release"].Kind != "milestone" {
+		t.Fatalf("copied fields: %+v / %+v", a, found["Release"])
+	}
+	if tl.ParentID == nil || *tl.ParentID != a.ID || a.CommentCount != 0 {
+		t.Fatalf("subtask must point at the copied parent, comments stay behind: %+v %+v", tl, a)
+	}
+	// original untouched
+	var ob struct{ Tasks []Task }
+	c.do("GET", fmt.Sprintf("/api/projects/%d/board", p.ID), nil, &ob)
+	for _, tk := range ob.Tasks {
+		if tk.Title == "Aufgabe" && !tk.Completed {
+			t.Fatal("original task was changed")
+		}
+	}
+	if code := c.do("POST", "/api/projects/999/duplicate", nil, nil); code != 404 {
+		t.Fatalf("unknown project: %d", code)
+	}
+}

@@ -55,6 +55,7 @@ func (a *API) routes() http.Handler {
 	m.HandleFunc("GET /api/projects/{id}/board", a.authed(a.board))
 	m.HandleFunc("PUT /api/projects/{id}/favorite", a.authed(a.setFavorite(true)))
 	m.HandleFunc("DELETE /api/projects/{id}/favorite", a.authed(a.setFavorite(false)))
+	m.HandleFunc("POST /api/projects/{id}/duplicate", a.authed(a.duplicateProject))
 	m.HandleFunc("GET /api/projects/{id}/updates", a.authed(a.listUpdates))
 	m.HandleFunc("POST /api/projects/{id}/updates", a.authed(a.createUpdate))
 	m.HandleFunc("POST /api/projects/{id}/sections", a.authed(a.createSection))
@@ -163,6 +164,7 @@ var priorities = map[string]bool{"": true, "low": true, "medium": true, "high": 
 // project status updates know three more states than the task status field (same as Asana)
 var projectStatuses = map[string]bool{"on_track": true, "at_risk": true, "off_track": true, "on_hold": true, "complete": true, "dropped": true}
 var projectIcons = map[string]bool{"list": true, "board": true, "timeline": true, "calendar": true, "rocket": true, "people": true, "chart": true, "home": true, "cart": true, "plane": true, "book": true, "briefcase": true, "heart": true, "star": true, "tools": true, "bug": true}
+var taskKinds = map[string]bool{"task": true, "milestone": true}
 var statuses = map[string]bool{"": true, "on_track": true, "at_risk": true, "off_track": true}
 var mySections = map[string]bool{"": true, "today": true, "next_week": true, "later": true}
 
@@ -562,6 +564,8 @@ type Task struct {
 	Position     float64 `json:"position"`
 	Version      int64   `json:"version"`
 	UpdatedAt    string  `json:"updatedAt"`
+	CreatedAt    string  `json:"createdAt"`
+	Kind         string  `json:"kind"` // task | milestone
 	LabelIDs     []int64 `json:"labelIds"`
 	BlockedBy    []int64 `json:"blockedBy"`
 	OpenBlockers int     `json:"openBlockers"` // incomplete tasks this one waits for
@@ -569,13 +573,13 @@ type Task struct {
 }
 
 const taskCols = `t.id,t.project_id,t.section_id,t.parent_id,t.title,t.description,t.start_date,t.due_date,t.priority,t.status,t.assignee_id,t.my_section,
-	t.completed,t.completed_at,t.position,t.version,t.updated_at,
+	t.completed,t.completed_at,t.position,t.version,t.updated_at,t.created_at,t.kind,
 	(SELECT COUNT(*) FROM task_deps d JOIN tasks b ON b.id=d.blocked_by_id WHERE d.task_id=t.id AND b.completed=0),
 	(SELECT COUNT(*) FROM comments c WHERE c.task_id=t.id)`
 
 func scanTask(s interface{ Scan(...any) error }) (t Task, err error) {
 	err = s.Scan(&t.ID, &t.ProjectID, &t.SectionID, &t.ParentID, &t.Title, &t.Description, &t.StartDate, &t.DueDate, &t.Priority, &t.Status, &t.AssigneeID, &t.MySection,
-		&t.Completed, &t.CompletedAt, &t.Position, &t.Version, &t.UpdatedAt, &t.OpenBlockers, &t.CommentCount)
+		&t.Completed, &t.CompletedAt, &t.Position, &t.Version, &t.UpdatedAt, &t.CreatedAt, &t.Kind, &t.OpenBlockers, &t.CommentCount)
 	t.LabelIDs, t.BlockedBy = []int64{}, []int64{}
 	return
 }
@@ -704,6 +708,7 @@ func (a *API) createTask(w http.ResponseWriter, r *http.Request) {
 		ParentID  int64
 		Title     string
 		Index     *int
+		Kind      string
 	}
 	if !decode(w, r, &in) {
 		return
@@ -711,6 +716,13 @@ func (a *API) createTask(w http.ResponseWriter, r *http.Request) {
 	title, err := text("title", in.Title, 1, 500)
 	if err != nil {
 		fail(w, 400, err.Error())
+		return
+	}
+	if in.Kind == "" {
+		in.Kind = "task"
+	}
+	if !taskKinds[in.Kind] {
+		fail(w, 400, "kind must be task or milestone")
 		return
 	}
 	tx, err := a.db.Begin()
@@ -743,6 +755,12 @@ func (a *API) createTask(w http.ResponseWriter, r *http.Request) {
 	id, _ := res.LastInsertId()
 	if in.Index != nil && in.ParentID == 0 {
 		if err := placeTask(tx, id, in.SectionID, *in.Index); err != nil {
+			serverError(w, err)
+			return
+		}
+	}
+	if in.Kind != "task" {
+		if _, err := tx.Exec(`UPDATE tasks SET kind=? WHERE id=?`, in.Kind, id); err != nil {
 			serverError(w, err)
 			return
 		}
@@ -893,6 +911,7 @@ func (a *API) updateTask(w http.ResponseWriter, r *http.Request) {
 		AssigneeID  *int64 // 0 clears
 		MySection   *string
 		BlockedBy   *[]int64
+		Kind        *string
 	}
 	if !decode(w, r, &in) {
 		return
@@ -920,6 +939,13 @@ func (a *API) updateTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sets, args = append(sets, "due_date=?"), append(args, *in.DueDate)
+	}
+	if in.Kind != nil {
+		if !taskKinds[*in.Kind] {
+			fail(w, 400, "kind must be task or milestone")
+			return
+		}
+		sets, args = append(sets, "kind=?"), append(args, *in.Kind)
 	}
 	if in.StartDate != nil {
 		if !validDate(*in.StartDate) {
@@ -1378,4 +1404,138 @@ func (a *API) setFavorite(on bool) http.HandlerFunc {
 		}
 		w.WriteHeader(204)
 	}
+}
+
+// duplicateProject copies a project with its sections, tasks, subtasks and labels (not comments, updates or dependencies).
+// Tasks start open; dates, assignee, priority, status and kind are kept.
+func (a *API) duplicateProject(w http.ResponseWriter, r *http.Request) {
+	src, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var in struct{ Name string }
+	if r.ContentLength != 0 && !decode(w, r, &in) {
+		return
+	}
+	tx, err := a.db.Begin()
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer tx.Rollback()
+	old, err := getProject(tx, src)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "project not found")
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		name = old.Name + " (Kopie)"
+	}
+	if name, err = text("name", name, 1, 200); err != nil {
+		fail(w, 400, err.Error())
+		return
+	}
+	res, err := tx.Exec(`INSERT INTO projects(name,color,description,icon,position) VALUES (?,?,?,?,(SELECT COALESCE(MAX(position),0)+1024 FROM projects))`, name, old.Color, old.Description, old.Icon)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	dst, _ := res.LastInsertId()
+	secMap := map[int64]int64{}
+	srows, err := tx.Query(`SELECT id,name,position FROM sections WHERE project_id=? ORDER BY position`, src)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	type sec struct {
+		id   int64
+		name string
+		pos  float64
+	}
+	var secs []sec
+	for srows.Next() {
+		var s sec
+		if err := srows.Scan(&s.id, &s.name, &s.pos); err != nil {
+			srows.Close()
+			serverError(w, err)
+			return
+		}
+		secs = append(secs, s)
+	}
+	srows.Close()
+	for _, s := range secs {
+		r, err := tx.Exec(`INSERT INTO sections(project_id,name,position) VALUES (?,?,?)`, dst, s.name, s.pos)
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+		secMap[s.id], _ = r.LastInsertId()
+	}
+	// parents first (parent_id IS NULL), then subtasks
+	taskMap := map[int64]int64{}
+	for _, top := range []bool{true, false} {
+		q := `SELECT id,section_id,parent_id,title,description,start_date,due_date,priority,status,assignee_id,my_section,position,kind FROM tasks WHERE project_id=? AND parent_id IS NULL ORDER BY position`
+		if !top {
+			q = `SELECT id,section_id,parent_id,title,description,start_date,due_date,priority,status,assignee_id,my_section,position,kind FROM tasks WHERE project_id=? AND parent_id IS NOT NULL ORDER BY id`
+		}
+		rows, err := tx.Query(q, src)
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+		type tk struct {
+			id                                                     int64
+			section, parent, assignee                              sql.NullInt64
+			title, desc, start, due, prio, status, mySection, kind string
+			pos                                                    float64
+		}
+		var tasks []tk
+		for rows.Next() {
+			var t tk
+			if err := rows.Scan(&t.id, &t.section, &t.parent, &t.title, &t.desc, &t.start, &t.due, &t.prio, &t.status, &t.assignee, &t.mySection, &t.pos, &t.kind); err != nil {
+				rows.Close()
+				serverError(w, err)
+				return
+			}
+			tasks = append(tasks, t)
+		}
+		rows.Close()
+		for _, t := range tasks {
+			var sec, par any
+			if t.section.Valid {
+				sec = secMap[t.section.Int64]
+			}
+			if t.parent.Valid {
+				par = taskMap[t.parent.Int64]
+			}
+			var asg any
+			if t.assignee.Valid {
+				asg = t.assignee.Int64
+			}
+			r, err := tx.Exec(`INSERT INTO tasks(project_id,section_id,parent_id,title,description,start_date,due_date,priority,status,assignee_id,my_section,position,kind) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+				dst, sec, par, t.title, t.desc, t.start, t.due, t.prio, t.status, asg, t.mySection, t.pos, t.kind)
+			if err != nil {
+				serverError(w, err)
+				return
+			}
+			nid, _ := r.LastInsertId()
+			taskMap[t.id] = nid
+			if _, err := tx.Exec(`INSERT INTO task_labels(task_id,label_id) SELECT ?,label_id FROM task_labels WHERE task_id=?`, nid, t.id); err != nil {
+				serverError(w, err)
+				return
+			}
+		}
+	}
+	p, err := getProject(tx, dst)
+	if err != nil || tx.Commit() != nil {
+		serverError(w, err)
+		return
+	}
+	a.events.publish(Event{Type: "project", ID: dst, ProjectID: dst})
+	writeJSON(w, 201, p)
 }
