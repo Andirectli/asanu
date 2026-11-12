@@ -1,21 +1,32 @@
 # Asanu server for ZimaOS: App Store → "+" → Install a customized app → YAML → paste → Install.
 # Only change the three ASANU_INIT_* values below. Nothing to prepare on the server.
+#
+# Two containers: the server and a small updater (Watchtower). The updater checks hourly whether a
+# newer Asanu image exists and replaces ONLY the asanu container (label filter). Before a database
+# change the server writes a backup to /data/backups. The "Nach Update suchen" button in the app
+# triggers the same check at once. To stay on a fixed version instead: set the image tag to a
+# version (e.g. :0.4.0) and delete the whole "updater" service plus the two ASANU_UPDATE_* lines.
 name: asanu
 services:
   asanu:
-    image: ghcr.io/andirectli/asanu-server:0.3.0   # update = raise the version
+    image: ghcr.io/andirectli/asanu-server:latest
     container_name: asanu
     restart: unless-stopped
     ports:
       - "8380:8080"               # left side = port on ZimaOS, change if taken (not 80/443)
     volumes:
       - asanu-data:/data          # Docker volume: created automatically with the right owner
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     environment:
       TZ: Europe/Berlin
       # First start only: creates your account. Password: at least 10 characters.
       ASANU_INIT_EMAIL: "ich@example.lan"
       ASANU_INIT_PASSWORD: "bitte-sofort-aendern-123"
       ASANU_INIT_NAME: "Ich"
+      # Internal link to the updater (the updater port is NOT published outside the compose network).
+      ASANU_UPDATE_URL: "http://updater:8080/v1/update"
+      ASANU_UPDATE_TOKEN: "asanu-intern-bitte-aendern"
     read_only: true
     cap_drop: [ALL]
     security_opt:
@@ -33,6 +44,30 @@ services:
       driver: json-file
       options:
         max-size: "5m"
+        max-file: "2"
+
+  updater:
+    image: ghcr.io/nicholas-fedor/watchtower:1.24.0
+    container_name: asanu-updater
+    restart: unless-stopped
+    command:
+      - --interval=3600           # check every hour
+      - --cleanup                 # remove old images after an update
+      - --label-enable            # only containers labelled watchtower.enable=true (= asanu)
+      - --http-api-periodic-polls # keep the hourly check although the API is on
+      - --http-api-endpoints=update
+      - --no-startup-message
+    environment:
+      TZ: Europe/Berlin
+      WATCHTOWER_HTTP_API_TOKEN: "asanu-intern-bitte-aendern"   # same value as ASANU_UPDATE_TOKEN above
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # needed to replace the container; gives root-level control of Docker
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options:
+        max-size: "2m"
         max-file: "2"
 
 volumes:

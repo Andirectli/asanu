@@ -3,7 +3,12 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -117,14 +122,14 @@ func openDB(path string) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(4)
-	if err := migrate(db); err != nil {
+	if err := migrate(db, filepath.Dir(path)); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return db, nil
 }
 
-func migrate(db *sql.DB) error {
+func migrate(db *sql.DB, dir string) error {
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)`); err != nil {
 		return err
 	}
@@ -134,6 +139,12 @@ func migrate(db *sql.DB) error {
 	}
 	if cur > len(migrations) {
 		return fmt.Errorf("database schema v%d is newer than this server (v%d); refusing to start", cur, len(migrations))
+	}
+	if cur > 0 && cur < len(migrations) {
+		// automatic updates must never be able to cost data: snapshot first
+		if err := preMigrationBackup(db, dir, cur, len(migrations)); err != nil {
+			return fmt.Errorf("backup before migration: %w", err)
+		}
 	}
 	for i := cur; i < len(migrations); i++ {
 		tx, err := db.Begin()
@@ -152,5 +163,28 @@ func migrate(db *sql.DB) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// preMigrationBackup writes <dir>/backups/pre-vFROM-to-vTO-<time>.db and keeps the newest 5.
+func preMigrationBackup(db *sql.DB, dir string, from, to int) error {
+	bdir := filepath.Join(dir, "backups")
+	if err := os.MkdirAll(bdir, 0o700); err != nil {
+		return err
+	}
+	name := filepath.Join(bdir, fmt.Sprintf("pre-v%d-to-v%d-%s.db", from, to, time.Now().UTC().Format("20060102-150405")))
+	if _, err := db.Exec(`VACUUM INTO ?`, name); err != nil {
+		return err
+	}
+	if err := os.Chmod(name, 0o600); err != nil {
+		return err
+	}
+	old, _ := filepath.Glob(filepath.Join(bdir, "pre-v*.db"))
+	sort.Strings(old) // timestamps sort chronologically within one from/to pair; good enough for pruning
+	for len(old) > 5 {
+		os.Remove(old[0])
+		old = old[1:]
+	}
+	log.Printf("database migration v%d -> v%d: backup written to %s", from, to, name)
 	return nil
 }

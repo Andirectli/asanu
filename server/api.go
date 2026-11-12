@@ -6,21 +6,25 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
 
 type API struct {
-	db      *sql.DB
-	events  *broker
-	limiter *loginLimiter
-	origins map[string]bool
-	seenMu  sync.Mutex
-	seen    map[string]time.Time
+	db                     *sql.DB
+	events                 *broker
+	limiter                *loginLimiter
+	origins                map[string]bool
+	seenMu                 sync.Mutex
+	seen                   map[string]time.Time
+	updateURL, updateToken string // optional sidecar (Watchtower) that replaces this container
+	updating               atomic.Bool
 }
 
 func newAPI(db *sql.DB) *API {
@@ -28,7 +32,7 @@ func newAPI(db *sql.DB) *API {
 	for _, o := range strings.Split(env("ASANU_CORS_ORIGINS", "tauri://localhost,http://tauri.localhost,https://tauri.localhost,http://localhost:1420"), ",") {
 		origins[strings.TrimSpace(o)] = true
 	}
-	return &API{db: db, events: &broker{subs: map[chan Event]struct{}{}}, limiter: &loginLimiter{fail: map[string][]time.Time{}}, origins: origins, seen: map[string]time.Time{}}
+	return &API{db: db, events: &broker{subs: map[chan Event]struct{}{}}, limiter: &loginLimiter{fail: map[string][]time.Time{}}, origins: origins, seen: map[string]time.Time{}, updateURL: os.Getenv("ASANU_UPDATE_URL"), updateToken: os.Getenv("ASANU_UPDATE_TOKEN")}
 }
 
 func (a *API) routes() http.Handler {
@@ -38,7 +42,7 @@ func (a *API) routes() http.Handler {
 			fail(w, 503, "database unavailable")
 			return
 		}
-		writeJSON(w, 200, map[string]any{"ok": true, "app": "asanu", "version": appVersion})
+		writeJSON(w, 200, map[string]any{"ok": true, "app": "asanu", "version": appVersion, "updater": a.updateURL != ""})
 	})
 	m.HandleFunc("POST /api/login", a.login)
 	m.HandleFunc("POST /api/logout", a.authed(a.logout))
@@ -65,6 +69,7 @@ func (a *API) routes() http.Handler {
 	m.HandleFunc("GET /api/labels", a.authed(a.listLabels))
 	m.HandleFunc("POST /api/labels", a.authed(a.createLabel))
 	m.HandleFunc("GET /api/search", a.authed(a.search))
+	m.HandleFunc("POST /api/update", a.authed(a.update))
 	m.HandleFunc("GET /api/users", a.authed(a.listUsers))
 	m.HandleFunc("GET /api/my-tasks", a.authed(a.myTasks))
 	return a.cors(m)
@@ -1289,4 +1294,30 @@ func (a *API) createUpdate(w http.ResponseWriter, r *http.Request) {
 	uid, _ := res.LastInsertId()
 	a.events.publish(Event{Type: "project", ID: id, ProjectID: id})
 	writeJSON(w, 201, ProjectUpdate{ID: uid, ProjectID: id, UserID: u.ID, UserName: u.Name, Status: in.Status, Body: body, CreatedAt: now()})
+}
+
+// update asks the updater sidecar to pull a newer image and recreate this container.
+// It answers 202 at once: the sidecar may stop this very process before it replies.
+func (a *API) update(w http.ResponseWriter, r *http.Request) {
+	if a.updateURL == "" {
+		fail(w, 404, "updates are not configured on this server")
+		return
+	}
+	if !a.updating.CompareAndSwap(false, true) {
+		fail(w, 409, "an update check is already running")
+		return
+	}
+	go func() {
+		defer a.updating.Store(false)
+		req, _ := http.NewRequest(http.MethodPost, a.updateURL, nil)
+		req.Header.Set("Authorization", "Bearer "+a.updateToken)
+		res, err := (&http.Client{Timeout: 15 * time.Minute}).Do(req)
+		if err != nil {
+			log.Printf("update request: %v", err)
+			return
+		}
+		res.Body.Close()
+		log.Printf("update request answered with %d", res.StatusCode)
+	}()
+	writeJSON(w, 202, map[string]any{"started": true, "version": appVersion})
 }

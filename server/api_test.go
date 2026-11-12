@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -444,5 +445,121 @@ func TestProjectOverviewStatusAndDescription(t *testing.T) {
 	c.do("GET", "/api/projects", nil, &ps)
 	if ps[0].Status != "at_risk" || ps[0].Description != "Bad renovieren" {
 		t.Fatalf("list: %+v", ps[0])
+	}
+}
+
+func TestMigrationWritesBackupFirstAndKeepsFive(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "old.db")
+	all := migrations
+	defer func() { migrations = all }()
+
+	migrations = all[:1]
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Exec(`INSERT INTO projects(name,color,position) VALUES ('vorher','#000000',1)`)
+	db.Close()
+	if left, _ := filepath.Glob(filepath.Join(dir, "backups", "*")); len(left) != 0 {
+		t.Fatalf("fresh database must not be backed up: %v", left)
+	}
+
+	migrations = all
+	db, err = openDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	files, _ := filepath.Glob(filepath.Join(dir, "backups", "pre-v1-to-v*.db"))
+	if len(files) != 1 {
+		t.Fatalf("expected one pre-migration backup, got %v", files)
+	}
+	info, _ := os.Stat(files[0])
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("backup mode %v", info.Mode())
+	}
+	// read the backup with plain SQL: openDB would migrate it
+	raw, err := sql.Open("sqlite", "file:"+files[0]+"?mode=ro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var n int
+	var name string
+	if err := raw.QueryRow(`SELECT COUNT(*), MAX(name) FROM projects`).Scan(&n, &name); err != nil || n != 1 || name != "vorher" {
+		t.Fatalf("backup content: %d %q %v", n, name, err)
+	}
+	var v int
+	raw.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&v)
+	if v != 1 {
+		t.Fatalf("backup must hold the pre-migration schema, got v%d", v)
+	}
+
+	// pruning keeps the newest five
+	for i := 0; i < 8; i++ {
+		os.WriteFile(filepath.Join(dir, "backups", fmt.Sprintf("pre-v0-to-v1-2020010%d-000000.db", i)), []byte("x"), 0o600)
+	}
+	db2, _ := sql.Open("sqlite", "file:"+path)
+	defer db2.Close()
+	if err := preMigrationBackup(db2, dir, 2, 3); err != nil {
+		t.Fatal(err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, "backups", "pre-v*.db")); len(left) != 5 {
+		t.Fatalf("expected 5 kept, got %d", len(left))
+	}
+}
+
+func TestUpdateEndpointTriggersSidecarOnce(t *testing.T) {
+	hits := make(chan string, 4)
+	release := make(chan struct{})
+	side := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits <- r.Header.Get("Authorization") + " " + r.Method + " " + r.URL.Path
+		<-release
+	}))
+	defer side.Close()
+	t.Setenv("ASANU_UPDATE_URL", side.URL+"/v1/update")
+	t.Setenv("ASANU_UPDATE_TOKEN", "geheim")
+	srv, stop := setup(t, filepath.Join(t.TempDir(), "asanu.db"))
+	defer stop()
+	c := &client{t: t, base: srv.URL}
+	if code := c.do("POST", "/api/update", nil, nil); code != 401 {
+		t.Fatalf("unauthenticated update: %d", code)
+	}
+	c.login("me@home.lan", "correct-horse-1")
+	var h struct{ Updater bool }
+	c.do("GET", "/api/health", nil, &h)
+	if !h.Updater {
+		t.Fatal("health must advertise the updater")
+	}
+	if code := c.do("POST", "/api/update", nil, nil); code != 202 {
+		t.Fatalf("update: %d", code)
+	}
+	select {
+	case got := <-hits:
+		if got != "Bearer geheim POST /v1/update" {
+			t.Fatalf("sidecar call: %q", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("sidecar not called")
+	}
+	if code := c.do("POST", "/api/update", nil, nil); code != 409 {
+		t.Fatalf("second update while running must be refused, got %d", code)
+	}
+	close(release)
+}
+
+func TestUpdateWithoutSidecarIs404(t *testing.T) {
+	srv, stop := setup(t, filepath.Join(t.TempDir(), "asanu.db"))
+	defer stop()
+	c := &client{t: t, base: srv.URL}
+	c.login("me@home.lan", "correct-horse-1")
+	if code := c.do("POST", "/api/update", nil, nil); code != 404 {
+		t.Fatalf("got %d", code)
+	}
+	var h struct{ Updater bool }
+	c.do("GET", "/api/health", nil, &h)
+	if h.Updater {
+		t.Fatal("updater must not be advertised")
 	}
 }

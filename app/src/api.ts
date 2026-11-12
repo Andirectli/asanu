@@ -98,7 +98,8 @@ export class Api {
     return data as T;
   }
 
-  health = () => this.req<{ ok: boolean; app: string; version: string }>('GET', '/api/health', undefined, AbortSignal.timeout(5000));
+  health = () => this.req<{ ok: boolean; app: string; version: string; updater?: boolean }>('GET', '/api/health', undefined, AbortSignal.timeout(5000));
+  startUpdate = () => this.req<{ started: boolean; version: string }>('POST', '/api/update');
   login = (email: string, password: string, device: string) => this.req<{ token: string; user: User }>('POST', '/api/login', { email, password, device });
   logout = () => this.req<void>('POST', '/api/logout');
   me = () => this.req<User>('GET', '/api/me');

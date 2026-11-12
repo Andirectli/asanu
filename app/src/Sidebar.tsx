@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BsArrowLeft, BsArrowRight, BsCheckCircle, BsChevronDown, BsChevronRight, BsHouse, BsPlus, BsSearch } from 'react-icons/bs';
+import { errorText } from './api';
 import { useApp } from './ctx';
 import { modKey } from './platform';
 import { COLORS } from './ui';
@@ -10,6 +11,56 @@ export function Sidebar() {
   const [name, setName] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [q, setQ] = useState(route.page === 'search' ? route.q : '');
+  const [server, setServer] = useState<{ version: string; updater: boolean } | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const { toast } = useApp();
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    api
+      .health()
+      .then((h) => setServer({ version: h.version, updater: !!h.updater }))
+      .catch(() => {});
+  }, [api, online]); // refetched after every reconnect, so the version updates itself after a server update
+
+  // Starts the update, then watches /api/health: a restart with a new version = updated, no restart = already current.
+  const checkUpdate = async () => {
+    if (!server || updating) return;
+    setUpdating(true);
+    const before = server.version;
+    try {
+      await api.startUpdate();
+      toast('Suche nach Update …', 'info');
+      let sawDown = false;
+      for (let i = 0; i < 30 && alive.current; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        try {
+          const h = await api.health();
+          if (h.version !== before) {
+            setServer({ version: h.version, updater: !!h.updater });
+            toast(`Server aktualisiert: ${before} → ${h.version}`, 'info');
+            return;
+          }
+          if (sawDown) {
+            toast(`Server neu gestartet (${h.version}).`, 'info');
+            return;
+          }
+        } catch {
+          sawDown = true; // the container is being replaced
+        }
+      }
+      toast(`Server ist aktuell (${before}).`, 'info');
+    } catch (e) {
+      toast(errorText(e));
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   const active = projects.filter((p) => !p.archived);
   const archived = projects.filter((p) => p.archived);
@@ -135,6 +186,16 @@ export function Sidebar() {
           Abmelden
         </button>
       </div>
+      {server && (
+        <div className="sidebar-version">
+          <span className="muted-dark">Server {server.version}</span>
+          {server.updater && (
+            <button type="button" className="btn link small dark-link" onClick={checkUpdate} disabled={updating}>
+              {updating ? 'Prüfe …' : 'Nach Update suchen'}
+            </button>
+          )}
+        </div>
+      )}
     </nav>
   );
 }

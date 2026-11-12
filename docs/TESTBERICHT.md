@@ -115,3 +115,18 @@ Grenzen 0.2: Verschieben zwischen Abschnitten geht per Maus; per Tastatur nur in
 | `tsc`, `tauri build` → Asanu_0.3.0_aarch64.dmg; Image `ghcr.io/andirectli/asanu-server:0.3.0` (amd64+arm64) hochgeladen, anonym abrufbar (HTTP 200) | ok |
 
 Nicht geprüft: native App 0.3.0 gestartet, Timeline mit sehr vielen oder sehr weit auseinanderliegenden Aufgaben, Balken ziehen (nicht gebaut). Neue App gegen alten Server 0.2.x: Übersicht-Funktionen melden dann Fehler, der Rest läuft.
+
+## Version 0.4.0 (Auto-Update)
+
+Ende-zu-Ende mit echten Images in Docker (Colima): Test-Tag `ghcr.io/andirectli/asanu-server:updatetest` zeigte zuerst auf 0.2.1 (Datenbank v2), dazu der Updater `ghcr.io/nicholas-fedor/watchtower:1.24.0`.
+
+| Prüfung | Ergebnis |
+|---|---|
+| Test-Tag auf 0.4.0 umgestellt, Update ausgelöst → Server von 0.2.1 auf 0.4.0 ersetzt (`updated: 1`), Projekt aus der alten Version noch da | ok |
+| Vor der Umstellung Sicherung `/data/backups/pre-v2-to-v3-….db` geschrieben (Log) | ok |
+| Updater fasst nur den Asanu-Container an (`scanned: 1`, obwohl weitere Container liefen) | ok |
+| App-Weg: `POST /api/update` → Server → Updater → „aktuell" (`updated: 0`); Antwort 202 sofort; Server < 0.4 antwortet 404 | ok |
+| Endgültige `deploy/zimaos-compose.yaml` unverändert gestartet: beide Container laufen, Server meldet `updater: true`, Knopf-Weg 202 | ok |
+| Server-Tests: Sicherung vor Migration (Inhalt = alter Stand, Modus 600), Aufräumen auf 5, Update-Endpunkt (401 ohne Login, 202, 409 bei laufendem Update, 404 ohne Updater) | bestanden |
+
+Nicht getestet: Update-Knopf in der Oberfläche der nativen App (nur API-Weg und Typecheck); ZimaOS selbst (Docker-Socket-Pfad `/var/run/docker.sock` ist Standard, auf ZimaOS aber nicht geprüft); stündliche Automatik über mehrere Stunden. Der Test-Tag `updatetest` liegt noch in der Registry (ohne Löschrecht des Tokens nicht entfernbar) und ist harmlos.

@@ -7,23 +7,32 @@ Ein Container, ein Programm, eine SQLite-Datei. Kein MySQL, kein Redis, keine Cl
 1. `deploy/zimaos-compose.yaml` öffnen, bei `ASANU_INIT_EMAIL`, `ASANU_INIT_PASSWORD` (mind. 10 Zeichen) und `ASANU_INIT_NAME` deine Werte eintragen, alles kopieren.
 2. ZimaOS → App Store → „+" → *Install a customized app* → oben **YAML** → Inhalt ersetzen → **Install**.
 
-ZimaOS lädt das Image `ghcr.io/andirectli/asanu-server` (öffentlich, amd64 + arm64) und legt das Daten-Volume selbst an.
+ZimaOS lädt das Image `ghcr.io/andirectli/asanu-server` (öffentlich, amd64 + arm64) und legt das Daten-Volume selbst an. Es werden **zwei** Container angelegt: `asanu` (der Server) und `asanu-updater` (hält ihn aktuell, siehe unten).
 
 Dann in der Desktop-App als Server `http://<ZimaOS-Adresse>:8380` eintragen (z. B. `http://zimaos:8380` über Tailscale) und mit E-Mail/Passwort aus Schritt 1 anmelden. Danach dürfen die drei `ASANU_INIT_*`-Zeilen raus; sie wirken ohnehin nur, solange es noch kein Konto gibt.
 
-**Update:** In ZimaOS bei der App „Bearbeiten" → in `image:` die Versionsnummer erhöhen → speichern. Daten bleiben im Volume. Ein älterer Server startet nicht auf einer neueren Datenbank (kein stilles Downgrade).
+## Updates (automatisch)
+
+- Der Update-Container (Watchtower, `ghcr.io/nicholas-fedor/watchtower`) prüft **stündlich**, ob unter `ghcr.io/andirectli/asanu-server:latest` eine neuere Version liegt, lädt sie und ersetzt den `asanu`-Container. Andere Container auf ZimaOS fasst er nicht an (Filter per Label; im Test: „scanned 1").
+- In der Mac-App steht unten links die Server-Version und **„Nach Update suchen"**. Der Knopf löst die Prüfung sofort aus; die App meldet „aktualisiert: X → Y" oder „aktuell". Während des Neustarts (einige Sekunden) verbindet sich die App von selbst neu.
+- **Daten sind geschützt:** Vor jeder Datenbank-Umstellung legt der Server eine Sicherung unter `/data/backups/pre-vX-to-vY-<zeit>.db` an (die letzten 5 bleiben). Ein älterer Server startet nicht auf einer neueren Datenbank (kein stilles Downgrade). Zurück auf eine alte Version geht nur mit Sicherung (Restore unten).
+- **Sicherheitshinweis:** Der Update-Container braucht Zugriff auf den Docker-Socket (`/var/run/docker.sock`); das ist root-gleiche Kontrolle über Docker auf ZimaOS. Dafür läuft nur dieses eine, fest benannte Programm mit Zugriff, und sein Anschluss ist nicht nach außen veröffentlicht. Außerdem gilt: Wer in deinem GitHub-Konto ein neues Image als `latest` veröffentlichen kann, bringt damit Code auf deinen Server. Das GitHub-Konto deshalb mit 2FA schützen.
+- **Festhalten auf einer Version / ohne Auto-Update:** In der YAML `image: ghcr.io/andirectli/asanu-server:0.4.0` (feste Version) eintragen und den ganzen Block `updater:` sowie die zwei Zeilen `ASANU_UPDATE_…` löschen. Dann zeigt die App keinen Update-Knopf.
+- Die zwei Werte `ASANU_UPDATE_TOKEN` (im Server) und `WATCHTOWER_HTTP_API_TOKEN` (im Updater) müssen gleich sein. Ändere beide oder keinen.
+
+**Update von einer älteren Installation (0.2.x/0.3.x ohne Updater):** Einmalig in ZimaOS die App löschen (das Daten-Volume bleibt) und die neue YAML installieren, oder die YAML der App bearbeiten und den `updater`-Block samt Token-Zeilen ergänzen. Danach geht es automatisch.
 
 ## Technische Daten
 
 | Was | Wert |
 |---|---|
-| Image | `ghcr.io/andirectli/asanu-server:<version>`, Basis `scratch`, ~5 MB, läuft als UID 65532 (kein root) |
+| Image | `ghcr.io/andirectli/asanu-server:latest` (oder feste Version), Basis `scratch`, ~5 MB, läuft als UID 65532 (kein root) |
 | Port | Container `8080`, auf ZimaOS `8380` (in der YAML links änderbar; 80/443 nicht nötig) |
 | Daten | Docker-Volume `asanu_asanu-data` → im Container `/data` (`asanu.db` + `-wal`/`-shm`). Auf dem Host: `/var/lib/docker/volumes/asanu_asanu-data/_data` |
-| Limits | 256 MB RAM, 0,5 CPU, 64 Prozesse, Dateisystem nur lesbar, keine Capabilities |
+| Limits | Server 256 MB RAM, 0,5 CPU, 64 Prozesse, Dateisystem nur lesbar, keine Capabilities; Updater 128 MB, 0,25 CPU |
 | Healthcheck | `/asanu-server health` alle 30 s |
 
-Umgebungsvariablen: `ASANU_INIT_EMAIL` / `ASANU_INIT_PASSWORD` / `ASANU_INIT_NAME` (nur erster Start), `ASANU_DATA_DIR` (Standard `/data`), `ASANU_ADDR` (Standard `:8080`), `TZ` (nur Log-Zeiten).
+Umgebungsvariablen: `ASANU_UPDATE_URL` / `ASANU_UPDATE_TOKEN` (Link zum Updater; ohne sie kein Update-Knopf), `ASANU_INIT_EMAIL` / `ASANU_INIT_PASSWORD` / `ASANU_INIT_NAME` (nur erster Start), `ASANU_DATA_DIR` (Standard `/data`), `ASANU_ADDR` (Standard `:8080`), `TZ` (nur Log-Zeiten).
 
 ## Konten (per SSH, selten nötig)
 
@@ -66,8 +75,10 @@ Die Desktop-Apps verbinden sich selbst neu. Nach Restore auf einen älteren Stan
 
 ## Neue Version veröffentlichen (Entwickler, auf dem Mac)
 
+Image mit neuer Versionsnummer **und** als `latest` hochladen; die Server holen es sich dann innerhalb einer Stunde oder per Knopf:
+
 ```bash
-cd server && docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/andirectli/asanu-server:0.3.0 --push .
+cd server && docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/andirectli/asanu-server:0.5.0 -t ghcr.io/andirectli/asanu-server:latest --push .
 ```
 
 Ohne Registry: `make linux-amd64`, Binary + `Dockerfile.prebuilt` auf den Server kopieren, dort `docker build -f Dockerfile.prebuilt -t asanu-server:0.3.0 .` und in der YAML `image: asanu-server:0.3.0` plus `pull_policy: never` setzen.
