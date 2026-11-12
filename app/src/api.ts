@@ -36,12 +36,13 @@ export type Comment = { id: number; taskId: number; userId: number; userName: st
 export type FieldType = 'text' | 'number' | 'date' | 'select';
 export type Field = { id: number; projectId: number; name: string; type: FieldType; options: string[] };
 export type FieldValues = Record<number, string>;
+export type Notification = { id: number; kind: 'assigned' | 'comment'; taskId: number; projectId: number; title: string; project: string; actorName: string; body: string; createdAt: string; read: boolean };
 export type Board = { project: Project; sections: Section[]; tasks: Task[]; fields: Field[]; fieldValues: Record<number, FieldValues> };
 export type TaskDetail = { task: Task; subtasks: Task[]; comments: Comment[]; parent: Task | null; blockedBy: Task[]; blocking: Task[]; fields: Field[]; fieldValues: FieldValues | undefined };
 export type TaskPatch = Partial<Pick<Task, 'title' | 'description' | 'startDate' | 'dueDate' | 'priority' | 'status' | 'mySection' | 'completed' | 'labelIds' | 'blockedBy' | 'kind'>> & {
   assigneeId?: number; // 0 clears
 };
-export type ServerEvent = { type: 'project' | 'section' | 'task' | 'label' | 'comment'; id: number; projectId?: number; taskId?: number };
+export type ServerEvent = { type: 'project' | 'section' | 'task' | 'label' | 'comment' | 'inbox'; id: number; projectId?: number; taskId?: number };
 
 /** status 0 = network error (server unreachable). */
 export class ApiError extends Error {
@@ -131,6 +132,8 @@ export class Api {
   moveTask = (id: number, sectionId: number, index: number) => this.req<Task>('POST', `/api/tasks/${id}/move`, { sectionId, index });
   deleteTask = (id: number) => this.req<void>('DELETE', `/api/tasks/${id}`);
   addComment = (taskId: number, body: string) => this.req<Comment>('POST', `/api/tasks/${taskId}/comments`, { body });
+  inbox = () => this.req<Notification[]>('GET', '/api/inbox');
+  markInboxRead = (ids: number[] = [], unread = false) => this.req<void>('POST', '/api/inbox/read', { ids, unread });
   users = () => this.req<User[]>('GET', '/api/users');
   myTasks = (completed = false) => this.req<Task[]>('GET', `/api/my-tasks${completed ? '?completed=1' : ''}`);
   labels = () => this.req<Label[]>('GET', '/api/labels');

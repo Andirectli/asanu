@@ -719,7 +719,9 @@ func TestCustomFields(t *testing.T) {
 	c.do("POST", fp, map[string]any{"name": "Phase", "type": "select", "options": []string{"Idee", "Bau", "Idee"}}, &sel)
 	c.do("POST", fp, map[string]any{"name": "Kosten", "type": "number"}, &num)
 	c.do("POST", fp, map[string]any{"name": "Termin", "type": "date"}, &dat)
-	set := func(f int64, v string) int { return c.do("PUT", fmt.Sprintf("/api/tasks/%d/fields/%d", tk.ID, f), map[string]string{"value": v}, nil) }
+	set := func(f int64, v string) int {
+		return c.do("PUT", fmt.Sprintf("/api/tasks/%d/fields/%d", tk.ID, f), map[string]string{"value": v}, nil)
+	}
 	if set(sel.ID, "Bau") != 204 || set(num.ID, "12.5") != 204 || set(dat.ID, "2026-12-01") != 204 {
 		t.Fatal("valid values rejected")
 	}
@@ -743,5 +745,67 @@ func TestCustomFields(t *testing.T) {
 	c.do("GET", fmt.Sprintf("/api/projects/%d/board", p.ID), nil, &bd)
 	if len(bd.Fields) != 2 || len(bd.FieldValues[tk.ID]) != 1 {
 		t.Fatalf("delete must remove values too: %+v", bd)
+	}
+}
+
+func TestInbox(t *testing.T) {
+	dbfile := filepath.Join(t.TempDir(), "asanu.db")
+	db, err := openDB(dbfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range [][3]string{{"me@home.lan", "Ich", "correct-horse-1"}, {"other@home.lan", "Anna", "correct-horse-2"}} {
+		if err := createUser(db, u[0], u[1], u[2]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+	srv, stop := setup(t, dbfile)
+	defer stop()
+	me, anna := &client{t: t, base: srv.URL}, &client{t: t, base: srv.URL}
+	me.login("me@home.lan", "correct-horse-1")
+	anna.login("other@home.lan", "correct-horse-2")
+	var annaU, meU User
+	anna.do("GET", "/api/me", nil, &annaU)
+	me.do("GET", "/api/me", nil, &meU)
+	var p Project
+	me.do("POST", "/api/projects", map[string]string{"name": "P", "color": "#f06a6a"}, &p)
+	var b struct{ Sections []Section }
+	me.do("GET", fmt.Sprintf("/api/projects/%d/board", p.ID), nil, &b)
+	var tk Task
+	me.do("POST", "/api/tasks", map[string]any{"projectId": p.ID, "sectionId": b.Sections[0].ID, "title": "Zahlung"}, &tk)
+	// assigning to yourself notifies nobody; assigning to Anna notifies Anna only
+	me.do("PATCH", fmt.Sprintf("/api/tasks/%d", tk.ID), map[string]any{"version": tk.Version, "assigneeId": meU.ID}, &tk)
+	var mine, hers []Notification
+	me.do("GET", "/api/inbox", nil, &mine)
+	if len(mine) != 0 {
+		t.Fatalf("self-assign notified: %+v", mine)
+	}
+	me.do("PATCH", fmt.Sprintf("/api/tasks/%d", tk.ID), map[string]any{"version": tk.Version, "assigneeId": annaU.ID}, &tk)
+	anna.do("POST", fmt.Sprintf("/api/tasks/%d/comments", tk.ID), map[string]string{"body": "Mach ich"}, nil)
+	me.do("POST", fmt.Sprintf("/api/tasks/%d/comments", tk.ID), map[string]string{"body": "Danke"}, nil)
+	anna.do("GET", "/api/inbox", nil, &hers)
+	me.do("GET", "/api/inbox", nil, &mine)
+	if len(hers) != 2 || hers[0].Kind != "comment" || hers[0].Body != "Danke" || hers[1].Kind != "assigned" || hers[1].ActorName != "Ich" || hers[1].Title != "Zahlung" || hers[0].Read {
+		t.Fatalf("anna: %+v", hers)
+	}
+	if len(mine) != 0 { // I am neither assignee nor earlier commenter
+		t.Fatalf("me: %+v", mine)
+	}
+	// a reply from Anna reaches me once I have commented
+	anna.do("POST", fmt.Sprintf("/api/tasks/%d/comments", tk.ID), map[string]string{"body": "Erledigt"}, nil)
+	me.do("GET", "/api/inbox", nil, &mine)
+	if len(mine) != 1 || mine[0].Body != "Erledigt" || mine[0].ActorName != "Anna" {
+		t.Fatalf("me: %+v", mine)
+	}
+	// reading is per user: Anna marks hers, mine stays unread
+	anna.do("POST", "/api/inbox/read", map[string]any{}, nil)
+	anna.do("GET", "/api/inbox", nil, &hers)
+	if !hers[0].Read || !hers[1].Read || hers[0].Body == "" {
+		t.Fatalf("read state: %+v", hers)
+	}
+	me.do("GET", "/api/inbox", nil, &mine)
+	if mine[0].Read {
+		t.Fatalf("read state: %+v / %+v", hers, mine)
 	}
 }

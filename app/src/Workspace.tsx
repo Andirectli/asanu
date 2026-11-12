@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type Api, errorText, type Label, type Project, type ServerEvent, type User } from './api';
 import { CreateDialog } from './CreateDialog';
 import { HomeView } from './HomeView';
+import { InboxView } from './InboxView';
 import { MyTasksView } from './MyTasksView';
 import { AppCtx, type Ctx, parseRoute, type Route, routeHash, type Toast } from './ctx';
 import { isMod } from './platform';
@@ -156,6 +157,7 @@ export function Workspace({ api, user, onLogout }: { api: Api; user: User; onLog
           {route.page === 'search' && <SearchView q={route.q} />}
           {route.page === 'home' && <HomeView />}
           {route.page === 'my' && <MyTasksView />}
+          {route.page === 'inbox' && <InboxView />}
         </main>
         {route.taskId && <TaskDetailPane key={route.taskId} taskId={route.taskId} />}
       </div>

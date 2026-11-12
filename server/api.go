@@ -73,6 +73,8 @@ func (a *API) routes() http.Handler {
 	m.HandleFunc("PATCH /api/fields/{id}", a.authed(a.updateField))
 	m.HandleFunc("DELETE /api/fields/{id}", a.authed(a.deleteField))
 	m.HandleFunc("PUT /api/tasks/{id}/fields/{fid}", a.authed(a.setFieldValue))
+	m.HandleFunc("GET /api/inbox", a.authed(a.inbox))
+	m.HandleFunc("POST /api/inbox/read", a.authed(a.markInboxRead))
 	m.HandleFunc("GET /api/labels", a.authed(a.listLabels))
 	m.HandleFunc("POST /api/labels", a.authed(a.createLabel))
 	m.HandleFunc("GET /api/search", a.authed(a.search))
@@ -932,6 +934,7 @@ func (a *API) updateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	var sets []string
 	var args []any
+	var notifyExtra []func(*sql.Tx) error
 	if in.Title != nil {
 		s, err := text("title", *in.Title, 1, 500)
 		if err != nil {
@@ -983,6 +986,15 @@ func (a *API) updateTask(w http.ResponseWriter, r *http.Request) {
 		sets, args = append(sets, "my_section=?"), append(args, *in.MySection)
 	}
 	if in.AssigneeID != nil {
+		if *in.AssigneeID != 0 && *in.AssigneeID != userFrom(r).ID {
+			var old sql.NullInt64
+			a.db.QueryRow(`SELECT assignee_id FROM tasks WHERE id=?`, id).Scan(&old)
+			if !old.Valid || old.Int64 != *in.AssigneeID {
+				to, from := *in.AssigneeID, userFrom(r).ID
+				defer a.events.publish(Event{Type: "inbox", ID: to})
+				notifyExtra = append(notifyExtra, func(tx *sql.Tx) error { return notify(tx, to, from, "assigned", id, "") })
+			}
+		}
 		var assignee any // nil clears
 		if *in.AssigneeID != 0 {
 			var n int
@@ -1011,7 +1023,7 @@ func (a *API) updateTask(w http.ResponseWriter, r *http.Request) {
 		}
 		sets, args = append(sets, "completed=?", "completed_at=?"), append(args, *in.Completed, at)
 	}
-	var extra []func(*sql.Tx) error
+	extra := notifyExtra
 	if in.LabelIDs != nil {
 		if len(*in.LabelIDs) > 50 {
 			fail(w, 400, "too many labels")
@@ -1170,6 +1182,27 @@ func (a *API) createComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.ID, _ = res.LastInsertId()
+	// tell the assignee and earlier commenters (not the author)
+	rows, err := a.db.Query(`SELECT assignee_id FROM tasks WHERE id=? AND assignee_id IS NOT NULL UNION SELECT user_id FROM comments WHERE task_id=?`, tid, tid)
+	if err == nil {
+		var who []int64
+		for rows.Next() {
+			var uid int64
+			if rows.Scan(&uid) == nil && uid != u.ID {
+				who = append(who, uid)
+			}
+		}
+		rows.Close()
+		for _, uid := range who {
+			snippet := []rune(body)
+			if len(snippet) > 200 {
+				snippet = snippet[:200]
+			}
+			if notify(a.db, uid, u.ID, "comment", tid, string(snippet)) == nil {
+				a.events.publish(Event{Type: "inbox", ID: uid})
+			}
+		}
+	}
 	a.events.publish(Event{Type: "comment", ID: c.ID, ProjectID: pid, TaskID: tid})
 	writeJSON(w, 201, c)
 }

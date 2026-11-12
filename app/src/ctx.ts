@@ -6,6 +6,7 @@ export type Route =
   | { page: 'project'; projectId: number; view: ProjectTab; taskId?: number }
   | { page: 'search'; q: string; taskId?: number }
   | { page: 'my'; taskId?: number }
+  | { page: 'inbox'; taskId?: number }
   | { page: 'home'; taskId?: number };
 
 export function parseRoute(hash: string): Route {
@@ -14,6 +15,7 @@ export function parseRoute(hash: string): Route {
   const taskId = Number(qs.get('task')) || undefined;
   const m = path.match(/^\/project\/(\d+)(?:\/(overview|list|board|timeline|calendar|dashboard))?/);
   if (m) return { page: 'project', projectId: Number(m[1]), view: (m[2] as ProjectTab) ?? 'list', taskId };
+  if (path.startsWith('/inbox')) return { page: 'inbox', taskId };
   if (path.startsWith('/my')) return { page: 'my', taskId };
   if (path.startsWith('/search')) return { page: 'search', q: qs.get('q') ?? '', taskId };
   return { page: 'home', taskId };
@@ -27,6 +29,7 @@ export function routeHash(r: Route): string {
   if (r.page === 'project') return `#/project/${r.projectId}/${r.view}${q}`;
   if (r.page === 'search') return `#/search${q}`;
   if (r.page === 'my') return `#/my${q}`;
+  if (r.page === 'inbox') return `#/inbox${q}`;
   return `#/${q}`;
 }
 

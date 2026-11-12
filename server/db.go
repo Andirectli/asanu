@@ -134,6 +134,18 @@ var migrations = []string{
 		value TEXT NOT NULL,
 		PRIMARY KEY (task_id, field_id)
 	);`,
+	// v0.7.1: inbox notifications (assigned to you, comments on your tasks)
+	`CREATE TABLE notifications (
+		id INTEGER PRIMARY KEY,
+		user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+		kind TEXT NOT NULL,
+		task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+		body TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		read INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE INDEX notifications_user ON notifications(user_id, read, id);`,
 }
 
 func openDB(path string) (*sql.DB, error) {

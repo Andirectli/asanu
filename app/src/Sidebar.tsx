@@ -1,12 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
-import { BsArrowLeft, BsArrowRight, BsCheckCircle, BsChevronDown, BsChevronRight, BsHouse, BsPlus, BsSearch } from 'react-icons/bs';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { BsArrowLeft, BsArrowRight, BsCheckCircle, BsChevronDown, BsChevronRight, BsBell, BsHouse, BsPlus, BsSearch } from 'react-icons/bs';
 import { errorText } from './api';
-import { useApp } from './ctx';
+import { useApp, useServerEvents } from './ctx';
 import { modKey } from './platform';
 import { COLORS, Popover, ProjectIcon } from './ui';
 
 export function Sidebar() {
   const { projects, route, go, api, run, reloadProjects, online, user, logout, create: openCreate } = useApp();
+  const [unread, setUnread] = useState(0);
+  const loadUnread = useCallback(() => {
+    api.inbox().then((l) => setUnread(l.filter((n) => !n.read).length)).catch(() => {});
+  }, [api]);
+  useEffect(loadUnread, [loadUnread]);
+  useServerEvents((e) => (e === 'reconnect' || (e.type === 'inbox' && e.id === user.id)) && loadUnread());
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [showArchived, setShowArchived] = useState(false);
@@ -158,6 +164,11 @@ export function Sidebar() {
           <li>
             <a href="#/" className={`nav-item ${route.page === 'home' ? 'selected' : ''}`} aria-current={route.page === 'home' ? 'page' : undefined}>
               <BsHouse /> Startseite
+            </a>
+          </li>
+          <li>
+            <a href="#/inbox" className={`nav-item ${route.page === 'inbox' ? 'selected' : ''}`} aria-current={route.page === 'inbox' ? 'page' : undefined}>
+              <BsBell /> Inbox {unread > 0 && <span className="badge" aria-label={`${unread} ungelesen`}>{unread}</span>}
             </a>
           </li>
           <li>
