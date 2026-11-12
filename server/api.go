@@ -69,6 +69,10 @@ func (a *API) routes() http.Handler {
 	m.HandleFunc("DELETE /api/tasks/{id}", a.authed(a.deleteTask))
 	m.HandleFunc("POST /api/tasks/{id}/comments", a.authed(a.createComment))
 
+	m.HandleFunc("POST /api/projects/{id}/fields", a.authed(a.createField))
+	m.HandleFunc("PATCH /api/fields/{id}", a.authed(a.updateField))
+	m.HandleFunc("DELETE /api/fields/{id}", a.authed(a.deleteField))
+	m.HandleFunc("PUT /api/tasks/{id}/fields/{fid}", a.authed(a.setFieldValue))
 	m.HandleFunc("GET /api/labels", a.authed(a.listLabels))
 	m.HandleFunc("POST /api/labels", a.authed(a.createLabel))
 	m.HandleFunc("GET /api/search", a.authed(a.search))
@@ -698,7 +702,12 @@ func (a *API) board(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.Favorite = a.favorites(userFrom(r).ID)[p.ID]
-	writeJSON(w, 200, map[string]any{"project": p, "sections": sections, "tasks": tasks})
+	fields, values, err := loadFields(tx, id)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"project": p, "sections": sections, "tasks": tasks, "fields": fields, "fieldValues": values})
 }
 
 func (a *API) createTask(w http.ResponseWriter, r *http.Request) {
@@ -890,7 +899,12 @@ func (a *API) taskDetail(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"task": t, "subtasks": subs, "comments": comments, "parent": parent, "blockedBy": blockedBy, "blocking": blocking})
+	fields, values, err := loadFields(tx, t.ProjectID)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"task": t, "subtasks": subs, "comments": comments, "parent": parent, "blockedBy": blockedBy, "blocking": blocking, "fields": fields, "fieldValues": values[t.ID]})
 }
 
 func (a *API) updateTask(w http.ResponseWriter, r *http.Request) {

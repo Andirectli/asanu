@@ -699,3 +699,49 @@ func TestMilestonesAndDuplicateProject(t *testing.T) {
 		t.Fatalf("unknown project: %d", code)
 	}
 }
+
+func TestCustomFields(t *testing.T) {
+	srv, stop := setup(t, filepath.Join(t.TempDir(), "asanu.db"))
+	defer stop()
+	c := &client{t: t, base: srv.URL}
+	c.login("me@home.lan", "correct-horse-1")
+	var p Project
+	c.do("POST", "/api/projects", map[string]string{"name": "F", "color": "#f06a6a"}, &p)
+	var b struct{ Sections []Section }
+	c.do("GET", fmt.Sprintf("/api/projects/%d/board", p.ID), nil, &b)
+	var tk Task
+	c.do("POST", "/api/tasks", map[string]any{"projectId": p.ID, "sectionId": b.Sections[0].ID, "title": "A"}, &tk)
+	fp := fmt.Sprintf("/api/projects/%d/fields", p.ID)
+	if code := c.do("POST", fp, map[string]any{"name": "Kunde", "type": "select"}, nil); code != 400 {
+		t.Fatalf("select without options: %d", code)
+	}
+	var sel, num, dat struct{ ID int64 }
+	c.do("POST", fp, map[string]any{"name": "Phase", "type": "select", "options": []string{"Idee", "Bau", "Idee"}}, &sel)
+	c.do("POST", fp, map[string]any{"name": "Kosten", "type": "number"}, &num)
+	c.do("POST", fp, map[string]any{"name": "Termin", "type": "date"}, &dat)
+	set := func(f int64, v string) int { return c.do("PUT", fmt.Sprintf("/api/tasks/%d/fields/%d", tk.ID, f), map[string]string{"value": v}, nil) }
+	if set(sel.ID, "Bau") != 204 || set(num.ID, "12.5") != 204 || set(dat.ID, "2026-12-01") != 204 {
+		t.Fatal("valid values rejected")
+	}
+	if set(sel.ID, "Nope") != 400 || set(num.ID, "abc") != 400 || set(dat.ID, "1.12.") != 400 {
+		t.Fatal("invalid values accepted")
+	}
+	var bd struct {
+		Fields      []Field
+		FieldValues map[int64]map[int64]string
+	}
+	c.do("GET", fmt.Sprintf("/api/projects/%d/board", p.ID), nil, &bd)
+	if len(bd.Fields) != 3 || len(bd.Fields[0].Options) != 2 || bd.FieldValues[tk.ID][sel.ID] != "Bau" || bd.FieldValues[tk.ID][num.ID] != "12.5" {
+		t.Fatalf("board fields: %+v", bd)
+	}
+	set(num.ID, "")
+	c.do("GET", fmt.Sprintf("/api/projects/%d/board", p.ID), nil, &bd)
+	if _, has := bd.FieldValues[tk.ID][num.ID]; has {
+		t.Fatal("empty value must clear")
+	}
+	c.do("DELETE", fmt.Sprintf("/api/fields/%d", sel.ID), nil, nil)
+	c.do("GET", fmt.Sprintf("/api/projects/%d/board", p.ID), nil, &bd)
+	if len(bd.Fields) != 2 || len(bd.FieldValues[tk.ID]) != 1 {
+		t.Fatalf("delete must remove values too: %+v", bd)
+	}
+}

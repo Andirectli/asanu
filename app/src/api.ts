@@ -33,8 +33,11 @@ export type Task = {
 };
 export type Label = { id: number; name: string; color: string };
 export type Comment = { id: number; taskId: number; userId: number; userName: string; body: string; createdAt: string };
-export type Board = { project: Project; sections: Section[]; tasks: Task[] };
-export type TaskDetail = { task: Task; subtasks: Task[]; comments: Comment[]; parent: Task | null; blockedBy: Task[]; blocking: Task[] };
+export type FieldType = 'text' | 'number' | 'date' | 'select';
+export type Field = { id: number; projectId: number; name: string; type: FieldType; options: string[] };
+export type FieldValues = Record<number, string>;
+export type Board = { project: Project; sections: Section[]; tasks: Task[]; fields: Field[]; fieldValues: Record<number, FieldValues> };
+export type TaskDetail = { task: Task; subtasks: Task[]; comments: Comment[]; parent: Task | null; blockedBy: Task[]; blocking: Task[]; fields: Field[]; fieldValues: FieldValues | undefined };
 export type TaskPatch = Partial<Pick<Task, 'title' | 'description' | 'startDate' | 'dueDate' | 'priority' | 'status' | 'mySection' | 'completed' | 'labelIds' | 'blockedBy' | 'kind'>> & {
   assigneeId?: number; // 0 clears
 };
@@ -115,6 +118,9 @@ export class Api {
   updates = (id: number) => this.req<ProjectUpdate[]>('GET', `/api/projects/${id}/updates`);
   addUpdate = (id: number, status: ProjectStatus, body: string) => this.req<ProjectUpdate>('POST', `/api/projects/${id}/updates`, { status, body });
   board = (id: number, signal?: AbortSignal) => this.req<Board>('GET', `/api/projects/${id}/board`, undefined, signal);
+  createField = (projectId: number, name: string, type: FieldType, options: string[]) => this.req<{ id: number }>('POST', `/api/projects/${projectId}/fields`, { name, type, options });
+  deleteField = (id: number) => this.req<void>('DELETE', `/api/fields/${id}`);
+  setFieldValue = (taskId: number, fieldId: number, value: string) => this.req<void>('PUT', `/api/tasks/${taskId}/fields/${fieldId}`, { value });
   createSection = (projectId: number, name: string) => this.req<Section>('POST', `/api/projects/${projectId}/sections`, { name });
   updateSection = (s: Section, name: string) => this.req<Section>('PATCH', `/api/sections/${s.id}`, { version: s.version, name });
   deleteSection = (s: Section) => this.req<void>('DELETE', `/api/sections/${s.id}`);

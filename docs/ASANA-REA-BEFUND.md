@@ -29,7 +29,7 @@
 | **Gruppieren** (nach Feld) | fehlt |
 | Filter (mit Bedingungen) | 5 feste Auswahlfelder |
 | Spaltenmenü: sortieren, filtern, gruppieren, Spalte hinzufügen/verschieben/ausblenden | fehlt (feste Spalten) |
-| **Eigene Felder:** Einzelauswahl, Mehrfachauswahl, Datum, Personen, Referenz, Lookup, Text, Zahl, Formel, ID, Timer, Zeiterfassung, Berechnung; Sammlung | fehlt (nur Priorität/Status/Labels) |
+| **Eigene Felder (gebaut in 0.7: Text, Zahl, Datum, Auswahl):** Einzelauswahl, Mehrfachauswahl, Datum, Personen, Referenz, Lookup, Text, Zahl, Formel, ID, Timer, Zeiterfassung, Berechnung; Sammlung | fehlt (nur Priorität/Status/Labels) |
 | Feldwerte Priorität: Niedrig/Mittel/Hoch; Status: Planmäßig/Gefährdet/Unplanmäßig; Optionen bearbeitbar | feste Werte |
 | Abschnitt: umbenennen, duplizieren, Unteraufgaben/Gruppen ein-/ausklappen, leere Gruppen ausblenden, löschen | umbenennen, löschen, einklappen |
 | In der Ansicht suchen | globale Suche |

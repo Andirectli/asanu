@@ -9,7 +9,8 @@ import { Avatar, CheckCircle, DueText, InlineEdit, LabelPills, PriorityPill, Sta
 const COL_W = { assignee: '118px', due: '120px', prio: '92px', status: '96px', labels: 'minmax(110px, 200px)' } as const;
 
 export function ListView({ m }: { m: BoardModel }) {
-  const template = ['minmax(240px, 1fr)', ...(Object.keys(COL_W) as (keyof typeof COL_W)[]).filter((k) => m.cols[k]).map((k) => COL_W[k])].join(' ');
+  const fields = m.board.fields ?? [];
+  const template = ['minmax(240px, 1fr)', ...(Object.keys(COL_W) as (keyof typeof COL_W)[]).filter((k) => m.cols[k]).map((k) => COL_W[k]), ...fields.map(() => '120px')].join(' ');
   return (
     <div className="list-view" style={{ '--cols': template } as React.CSSProperties}>
       <div className="list-head">
@@ -19,6 +20,11 @@ export function ListView({ m }: { m: BoardModel }) {
         {m.cols.prio && <span className="col-prio">Priorität</span>}
         {m.cols.status && <span>Status</span>}
         {m.cols.labels && <span className="col-labels">Labels</span>}
+        {fields.map((f) => (
+          <span key={f.id} className="ellipsis" title={f.name}>
+            {f.name}
+          </span>
+        ))}
       </div>
       {m.groups ? (
         m.groups.map((g) => (
@@ -151,6 +157,11 @@ function TaskRow({ t, m, handle }: { t: Task; m: BoardModel; handle: React.HTMLA
           <LabelPills ids={t.labelIds} labels={labels} />
         </span>
       )}
+      {(m.board.fields ?? []).map((f) => (
+        <span key={f.id} className="ellipsis muted-text">
+          {m.board.fieldValues?.[t.id]?.[f.id] ?? ''}
+        </span>
+      ))}
     </div>
   );
 }

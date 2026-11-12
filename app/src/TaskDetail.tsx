@@ -1,3 +1,5 @@
+import { Fragment } from 'react';
+import { FieldInput } from './FieldsMenu';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BsArrowsAngleContract, BsArrowsAngleExpand, BsCheck, BsChevronRight, BsHourglassSplit, BsTrash, BsX } from 'react-icons/bs';
 import { ApiError, errorText, type Task, type TaskDetail, type TaskPatch } from './api';
@@ -38,7 +40,7 @@ export function TaskDetailPane({ taskId }: { taskId: number }) {
     load();
   }, [load]);
   useServerEvents((e) => {
-    if (e === 'reconnect' || e.id === taskId || e.taskId === taskId || (e.type === 'task' && [...(d?.subtasks ?? []), ...(d?.blockedBy ?? []), ...(d?.blocking ?? [])].some((s) => s.id === e.id))) load();
+    if (e === 'reconnect' || (e.type === 'project' && e.id === d?.task.projectId) || e.id === taskId || e.taskId === taskId || (e.type === 'task' && [...(d?.subtasks ?? []), ...(d?.blockedBy ?? []), ...(d?.blocking ?? [])].some((s) => s.id === e.id))) load();
   });
 
   const save = useCallback(
@@ -298,6 +300,21 @@ export function TaskDetailPane({ taskId }: { taskId: number }) {
               <span>{t.kind === 'milestone' ? '◆ Meilenstein' : 'Aufgabe'}</span>
             </HoverSelect>
           </dd>
+          {(d.fields ?? []).map((f) => (
+            <Fragment key={f.id}>
+              <dt>{f.name}</dt>
+              <dd>
+                <FieldInput
+                  f={f}
+                  value={d.fieldValues?.[f.id] ?? ''}
+                  onSave={async (v) => {
+                    await run(api.setFieldValue(t.id, f.id, v));
+                    load();
+                  }}
+                />
+              </dd>
+            </Fragment>
+          ))}
           <dt>Labels</dt>
           <dd className="row gap wrap anchor">
             {t.labelIds.map((id) => {

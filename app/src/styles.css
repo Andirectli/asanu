@@ -496,3 +496,29 @@ select.status-select { border-color: transparent !important; font-weight: 500; }
 button.filter { border: none; background: none; cursor: pointer; font-size: 13px; }
 button.filter:hover { background: var(--bg-hover); }
 .list-head > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* custom fields */
+.field-add { display: grid; gap: 6px; padding: 8px 12px; }
+.field-input { width: 100%; border: 0; background: transparent; font: inherit; color: inherit; padding: 4px 6px; border-radius: 6px; }
+.field-input:hover, .field-input:focus { background: var(--hover, rgba(128,128,128,.14)); outline: none; }
+.muted-text { color: var(--muted, #6d6e6f); font-size: 13px; }
+
+/* dashboard */
+.dashboard { padding: 20px 24px; overflow: auto; }
+.dash-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.dash-tile { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; }
+.dash-tile-n { font-size: 26px; font-weight: 600; }
+.dash-tile.warn .dash-tile-n { color: #d6453d; }
+.dash-legend { margin: 14px 0 4px; display: flex; align-items: center; gap: 6px; }
+.dash-key { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-left: 8px; }
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+.dash-card { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.dash-card h3 { font-size: 14px; margin: 0 0 10px; }
+.dash-bar-row { display: grid; grid-template-columns: 110px 1fr 28px; align-items: center; gap: 8px; height: 24px; font-size: 13px; }
+.dash-bar-track { display: flex; height: 12px; }
+.dash-bar { height: 100%; }
+.dash-bar.done, .dash-key.done { background: #4ecbc4; }
+.dash-bar.open, .dash-key.open { background: #a2a0a2; }
+.dash-bar:first-child { border-radius: 4px 0 0 4px; }
+.dash-bar:last-child { border-radius: 0 4px 4px 0; }
+.dash-bar-n { text-align: right; color: var(--muted, #6d6e6f); }

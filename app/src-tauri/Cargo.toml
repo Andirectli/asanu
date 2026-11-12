@@ -1,6 +1,6 @@
 [package]
 name = "asanu"
-version = "0.6.1"
+version = "0.7.0"
 description = "Asanu – self-hosted project management"
 edition = "2021"
 license = "MIT"

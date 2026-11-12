@@ -1,3 +1,5 @@
+import { DashboardView } from './DashboardView';
+import { FieldsMenu } from './FieldsMenu';
 import type { DropResult } from '@hello-pangea/dnd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BsArchive, BsArrowDown, BsArrowUp, BsBoxArrowUpLeft, BsCopy, BsDownload, BsThreeDots, BsStar, BsStarFill } from 'react-icons/bs';
@@ -135,7 +137,7 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!isMod(e)) return;
-      const tab = ({ '0': 'overview', '1': 'list', '2': 'board', '3': 'timeline', '4': 'calendar' } as Record<string, ProjectTab>)[e.key];
+      const tab = ({ '0': 'overview', '1': 'list', '2': 'board', '3': 'timeline', '4': 'calendar', '5': 'dashboard' } as Record<string, ProjectTab>)[e.key];
       if (tab) {
         e.preventDefault();
         go({ page: 'project', projectId, view: tab });
@@ -378,12 +380,15 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
           <a role="tab" aria-selected={view === 'timeline'} className={view === 'timeline' ? 'active' : ''} href={`#/project/${p.id}/timeline`} title={`${modKey}3`}>
             Zeitleiste
           </a>
+          <a role="tab" aria-selected={view === 'dashboard'} className={view === 'dashboard' ? 'active' : ''} href={`#/project/${p.id}/dashboard`} title={`${modKey}5`}>
+            Dashboard
+          </a>
           <a role="tab" aria-selected={view === 'calendar'} className={view === 'calendar' ? 'active' : ''} href={`#/project/${p.id}/calendar`} title={`${modKey}4`}>
             Kalender
           </a>
         </div>
       </header>
-      {view !== 'overview' && <div className="toolbar">
+      {view !== 'overview' && view !== 'dashboard' && <div className="toolbar">
         <button type="button" className="btn primary small" data-add-task onClick={() => {
             const input = document.querySelector<HTMLInputElement>('[data-add-input]');
             if (input) input.focus();
@@ -428,6 +433,7 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
                   <input type="checkbox" checked={cols[k]} onChange={() => saveCols({ ...cols, [k]: !cols[k] })} /> {l}
                 </label>
               ))}
+              <FieldsMenu projectId={projectId} fields={board?.fields ?? []} onChange={load} />
             </Popover>
           </div>
         )}
@@ -438,7 +444,7 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
         )}
       </div>}
       {error && <div className="banner">{error}</div>}
-      {view === 'overview' ? <OverviewView m={model} onDescription={(description) => updateProject({ description })} /> : view === 'list' ? <ListView m={model} /> : view === 'board' ? <BoardView m={model} /> : view === 'timeline' ? <TimelineView m={model} /> : <CalendarView m={model} />}
+      {view === 'overview' ? <OverviewView m={model} onDescription={(description) => updateProject({ description })} /> : view === 'list' ? <ListView m={model} /> : view === 'board' ? <BoardView m={model} /> : view === 'timeline' ? <TimelineView m={model} /> : view === 'dashboard' ? <DashboardView m={model} /> : <CalendarView m={model} />}
     </div>
   );
 }

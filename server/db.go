@@ -117,6 +117,23 @@ var migrations = []string{
 	);`,
 	// v0.6: task kind (task | milestone)
 	`ALTER TABLE tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'task';`,
+	// v0.7: custom fields per project
+	`CREATE TABLE custom_fields (
+		id INTEGER PRIMARY KEY,
+		project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+		name TEXT NOT NULL,
+		type TEXT NOT NULL,
+		options TEXT NOT NULL DEFAULT '[]',
+		position REAL NOT NULL DEFAULT 0,
+		version INTEGER NOT NULL DEFAULT 1
+	);
+	CREATE INDEX custom_fields_project ON custom_fields(project_id);
+	CREATE TABLE field_values (
+		task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+		field_id INTEGER NOT NULL REFERENCES custom_fields(id) ON DELETE CASCADE,
+		value TEXT NOT NULL,
+		PRIMARY KEY (task_id, field_id)
+	);`,
 }
 
 func openDB(path string) (*sql.DB, error) {
