@@ -1,13 +1,14 @@
 # Asanu server for ZimaOS ("App Store → + → Install a customized app → Import → Docker Compose").
-# Prerequisite: image asanu-server:0.2.0 is loaded on ZimaOS (see docs/ZIMAOS.md) and
-# /DATA/AppData/asanu/data exists and belongs to UID 65532 (chown -R 65532:65532).
+# Prerequisites (see docs/ZIMAOS.md): ZimaOS is logged in to ghcr.io once
+# (sudo docker login ghcr.io -u Andirectli) and /DATA/AppData/asanu/data exists,
+# owned by UID 65532 (chown -R 65532:65532). Works on amd64 and arm64.
 name: asanu
 services:
   asanu:
-    image: asanu-server:0.2.0
+    image: ghcr.io/andirectli/asanu-server:0.2.0
     container_name: asanu
     restart: unless-stopped
-    pull_policy: never            # local image only, no registry
+    pull_policy: missing          # private image from GitHub; update = change the version tag
     ports:
       - "8380:8080"               # host port left side: change freely (not 80/443)
     volumes:

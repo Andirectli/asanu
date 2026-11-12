@@ -12,6 +12,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=
  && mkdir -p /out/data
 
 FROM scratch
+LABEL org.opencontainers.image.source="https://github.com/Andirectli/asanu" org.opencontainers.image.description="Asanu server" org.opencontainers.image.licenses="MIT"
 COPY --from=build /out/asanu-server /asanu-server
 COPY --from=build --chown=65532:65532 /out/data /data
 USER 65532:65532

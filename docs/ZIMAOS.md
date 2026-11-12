@@ -6,7 +6,7 @@ Ein Container, ein statisches Go-Binary, SQLite-Datei auf dem Host. Kein MySQL, 
 
 | Was | Wert |
 |---|---|
-| Image | `asanu-server:0.2.0` (lokal gebaut, **nicht** in einer Registry) |
+| Image | `ghcr.io/andirectli/asanu-server:0.2.0` (privat auf GitHub, amd64 + arm64) |
 | Architektur | `linux/amd64` (ZimaBoard, ZimaBlade, ZimaCube = Intel x86-64). Für ARM-Hosts `linux/arm64` bauen. Prüfen: `uname -m` auf ZimaOS → `x86_64` = amd64. |
 | Container-Port | `8080` |
 | Host-Port (Vorschlag) | `8380` – frei wählbar in der Compose-Datei, 80/443 werden nicht benötigt |
@@ -27,7 +27,26 @@ Ein Container, ein statisches Go-Binary, SQLite-Datei auf dem Host. Kein MySQL, 
 | `ASANU_CORS_ORIGINS` | nein | Tauri-Origins + `http://localhost:1420` | Nur für Entwicklung ändern |
 | `TZ` | nein | UTC | Nur für Log-Zeitstempel |
 
-## Schritt 1 – Image bauen (auf dem Mac, nicht auf dem Heimserver)
+## Schritt 1 – ZimaOS einmal bei GitHub anmelden (empfohlen)
+
+Das Image liegt privat in der GitHub Container Registry. ZimaOS lädt es selbst, wenn es einmal angemeldet ist:
+
+1. Token anlegen: https://github.com/settings/tokens/new?scopes=read:packages&description=ZimaOS%20Asanu – nur **read:packages** anhaken, Ablaufdatum nach Wunsch, „Generate token", Token kopieren.
+2. Per SSH auf ZimaOS:
+
+```bash
+sudo docker login ghcr.io -u Andirectli
+```
+
+Als Passwort das Token einfügen (Eingabe bleibt unsichtbar) → „Login Succeeded". Danach direkt zu Schritt 2.
+
+Neue Version veröffentlichen (auf dem Mac, Docker/Colima nötig):
+
+```bash
+cd server && docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/andirectli/asanu-server:0.3.0 --push .
+```
+
+## Schritt 1 (Alternative) – Image ohne GitHub bauen und kopieren
 
 **Weg A – mit Docker auf dem Mac** (Docker Desktop, OrbStack oder Colima). So getestet mit Colima:
 
@@ -71,7 +90,7 @@ ssh root@zimaos.local 'mkdir -p /DATA/AppData/asanu/data && chown -R 65532:65532
 3. Prüfen: `curl http://zimaos.local:8380/api/health` → `{"app":"asanu","ok":true,...}`
 4. In der Desktop-App anmelden. Danach `ASANU_INIT_EMAIL`/`ASANU_INIT_PASSWORD` aus der Compose-Datei löschen und die App neu bereitstellen.
 
-Hinweis: Ein YAML-Import lädt keine Git-Dateien, Build-Kontexte oder `.env`-Dateien. Deshalb steht alles Nötige direkt in der YAML und das Image muss vorher geladen sein (`pull_policy: never`).
+Hinweis: Ein YAML-Import lädt keine Git-Dateien, Build-Kontexte oder `.env`-Dateien. Deshalb steht alles Nötige direkt in der YAML. Beim Weg ohne GitHub in der YAML `image: asanu-server:0.2.0` und `pull_policy: never` eintragen.
 
 ## Konten verwalten
 
@@ -113,7 +132,7 @@ Die Desktop-Apps verbinden sich selbst neu und laden den wiederhergestellten Sta
 Von 0.1.0 auf 0.2.0: Die Datenbank bekommt beim ersten Start automatisch die neuen Felder (Zuständig, Startdatum, Status, Abhängigkeiten); bestehende Daten bleiben unverändert (getestet). Ein 0.1.0-Server startet danach nicht mehr auf dieser Datenbank – zurück nur per Backup.
 
 
-Neues Image laden (Schritt 1 mit neuer Versionsnummer), in der Compose-Datei `image:` anpassen, neu bereitstellen. Die Daten liegen im Bind-Mount und bleiben erhalten. Migrationen laufen beim Start automatisch in einer Transaktion. Vorher ein Backup machen. Ein älteres Binary verweigert den Start auf einer neueren Datenbank (kein stilles Downgrade).
+In der Compose-Datei die Versionsnummer in `image:` erhöhen und neu bereitstellen – ZimaOS lädt die neue Version von GitHub. Die Daten liegen im Bind-Mount und bleiben erhalten. Migrationen laufen beim Start automatisch in einer Transaktion. Vorher ein Backup machen. Ein älteres Binary verweigert den Start auf einer neueren Datenbank (kein stilles Downgrade).
 
 ## Zugriff: Heimnetz, VPN, HTTPS
 
