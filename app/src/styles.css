@@ -1,23 +1,23 @@
 /* Look follows the asana-clone-app: dark 240px navigation, light work area, compact rows, subtle dividers. */
 :root {
-  --nav-bg: #1e1f21;
+  --nav-bg: #262626;
   --nav-fg: #f5f4f3;
   --nav-muted: #a2a0a2;
   --nav-hover: rgba(255, 255, 255, 0.08);
-  --nav-selected: rgba(255, 255, 255, 0.16);
+  --nav-selected: rgba(255, 255, 255, 0.11);
   --bg: #ffffff;
   --bg-soft: #f9f8f8;
   --bg-hover: #f5f3f3;
-  --line: #edeae9;
+  --line: #eaeaea;
   --line-strong: #e0dcdb;
-  --fg: #1e1f21;
+  --fg: #050505;
   --muted: #6d6e6f;
-  --primary: #4573d2;
+  --primary: #4075cf;
   --primary-hover: #3f69bf;
   --success: #58a182;
   --danger: #c92f54;
   --focus: #4573d2;
-  --selected: #edf1fc;
+  --selected: #eff4fd;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   font-size: 14px;
   color: var(--fg);
@@ -110,10 +110,10 @@ h1, h3 { margin: 0; }
 .project-icon { width: 30px; height: 30px; border-radius: 8px; border: none; display: inline-flex; align-items: center; justify-content: center; }
 .project-name { font-size: 20px; font-weight: 500; max-width: 60%; }
 .archived-pill { background: #f1f0f0; color: var(--muted); }
-.tabs { display: flex; gap: 20px; margin-top: 8px; }
-.tabs a { padding: 8px 0; color: var(--muted); border-bottom: 2px solid transparent; font-size: 14px; }
-.tabs a:hover { color: var(--fg); }
-.tabs a.active { color: var(--fg); border-bottom-color: var(--fg); }
+.tabs { display: flex; gap: 4px; margin: 6px 0 8px; }
+.tabs a { padding: 4px 8px; color: var(--muted); border-radius: 6px; font-size: 14px; font-weight: 500; }
+.tabs a:hover { background: var(--bg-hover); color: var(--fg); }
+.tabs a.active { background: #eff4fd; color: #2c60b8; }
 .toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .filter { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 8px; border-radius: 6px; font-size: 13px; color: var(--muted); }
 .filter:hover { background: var(--bg-hover); }
@@ -537,3 +537,16 @@ button.filter:hover { background: var(--bg-hover); }
 .inbox-title { font-weight: 500; }
 .inbox-body { white-space: pre-wrap; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .inbox-empty { padding: 24px 8px; }
+
+/* toolbar like Asana: compact icon buttons that open a menu */
+.toolbar { padding: 8px 24px; gap: 4px; }
+.tool-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border: 0; background: none; border-radius: 6px; font-size: 12px; font-weight: 500; color: #636363; }
+.tool-btn:hover { background: var(--bg-hover); }
+.tool-btn.active { background: var(--selected); color: #2c60b8; }
+.tool-pop { display: flex; flex-direction: column; gap: 4px; min-width: 230px; padding: 6px; }
+.tool-pop .filter { justify-content: space-between; height: 32px; color: var(--fg); }
+.tool-pop .filter select { text-align: right; }
+.project-header h1 { font-size: 20px; font-weight: 500; }
+.section-name { font-size: 16px; font-weight: 500; }
+.toolbar .btn.primary { border-radius: 6px; height: 28px; font-size: 12px; }
+.tabs { margin-left: -8px; }

@@ -2,7 +2,7 @@ import { DashboardView } from './DashboardView';
 import { FieldsMenu } from './FieldsMenu';
 import type { DropResult } from '@hello-pangea/dnd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BsArchive, BsArrowDown, BsArrowUp, BsBoxArrowUpLeft, BsCopy, BsDownload, BsThreeDots, BsStar, BsStarFill } from 'react-icons/bs';
+import { BsArchive, BsArrowDownUp, BsBoxArrowUpLeft, BsCollection, BsCopy, BsDownload, BsFilter, BsSliders, BsStar, BsStarFill, BsThreeDots } from 'react-icons/bs';
 import { ApiError, type Board, type Section, type Task } from './api';
 import { BoardView } from './BoardView';
 import { CalendarView } from './CalendarView';
@@ -83,7 +83,6 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
   const [sort, setSort] = useState<Sort>('manual');
   const [desc, setDesc] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupBy>('section');
-  const [colsOpen, setColsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [cols, setCols] = useState<Cols>(() => {
     try {
@@ -397,54 +396,69 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
           + Aufgabe hinzufügen
         </button>
         <span className="spacer" />
-        <FilterSelect label="Status" value={filter.status} onChange={(v) => setFilter({ ...filter, status: v as Filter['status'] })} options={[['open', 'Offen'], ['done', 'Erledigt'], ['all', 'Alle']]} />
-        <FilterSelect label="Priorität" value={filter.priority} onChange={(v) => setFilter({ ...filter, priority: v })} options={[['', 'Alle'], ...PRIORITIES.filter((x) => x.value).map((x) => [x.value, x.label] as [string, string])]} />
-        <FilterSelect label="Label" value={String(filter.label)} onChange={(v) => setFilter({ ...filter, label: Number(v) })} options={[['0', 'Alle'], ...[...labels.values()].map((l) => [String(l.id), l.name] as [string, string])]} />
-        <FilterSelect label="Verantwortlich" value={filter.assignee} onChange={(v) => setFilter({ ...filter, assignee: v as Filter['assignee'] })} options={[['', 'Alle'], ['me', 'Ich'], ['none', 'Niemand']]} />
-        <FilterSelect label="Fällig" value={filter.due} onChange={(v) => setFilter({ ...filter, due: v as Filter['due'] })} options={[['', 'Egal'], ['overdue', 'Überfällig'], ['today', 'Bis heute'], ['week', 'Nächste 7 Tage'], ['none', 'Ohne Datum']]} />
-        {view === 'list' && <FilterSelect label="Gruppieren" value={groupBy} onChange={(v) => setGroupBy(v as GroupBy)} options={GROUPS} />}
+        <ToolMenu icon={<BsFilter />} label="Filter" active={JSON.stringify(filter) !== JSON.stringify(defaultFilter)}>
+          <FilterSelect label="Status" value={filter.status} onChange={(v) => setFilter({ ...filter, status: v as Filter['status'] })} options={[['open', 'Offen'], ['done', 'Erledigt'], ['all', 'Alle']]} />
+          <FilterSelect label="Priorität" value={filter.priority} onChange={(v) => setFilter({ ...filter, priority: v })} options={[['', 'Alle'], ...PRIORITIES.filter((x) => x.value).map((x) => [x.value, x.label] as [string, string])]} />
+          <FilterSelect label="Label" value={String(filter.label)} onChange={(v) => setFilter({ ...filter, label: Number(v) })} options={[['0', 'Alle'], ...[...labels.values()].map((l) => [String(l.id), l.name] as [string, string])]} />
+          <FilterSelect label="Verantwortlich" value={filter.assignee} onChange={(v) => setFilter({ ...filter, assignee: v as Filter['assignee'] })} options={[['', 'Alle'], ['me', 'Ich'], ['none', 'Niemand']]} />
+          <FilterSelect label="Fällig" value={filter.due} onChange={(v) => setFilter({ ...filter, due: v as Filter['due'] })} options={[['', 'Egal'], ['overdue', 'Überfällig'], ['today', 'Bis heute'], ['week', 'Nächste 7 Tage'], ['none', 'Ohne Datum']]} />
+          {JSON.stringify(filter) !== JSON.stringify(defaultFilter) && (
+            <button type="button" className="btn link small" onClick={() => setFilter(defaultFilter)}>
+              Zurücksetzen
+            </button>
+          )}
+        </ToolMenu>
         {(view === 'list' || view === 'board') && (
-          <>
+          <ToolMenu icon={<BsArrowDownUp />} label="Sortieren" active={sort !== 'manual'}>
             <FilterSelect label="Sortieren" value={sort} onChange={(v) => setSort(v as Sort)} options={SORTS} />
             {sort !== 'manual' && (
-              <button type="button" className="icon-btn" aria-label={desc ? 'Absteigend sortiert' : 'Aufsteigend sortiert'} title={desc ? 'Absteigend' : 'Aufsteigend'} onClick={() => setDesc(!desc)}>
-                {desc ? <BsArrowDown /> : <BsArrowUp />}
+              <button type="button" className="btn link small" onClick={() => setDesc(!desc)}>
+                {desc ? '↓ Absteigend' : '↑ Aufsteigend'} (umkehren)
               </button>
             )}
-          </>
+          </ToolMenu>
         )}
         {view === 'list' && (
-          <div className="anchor">
-            <button type="button" className="filter" aria-haspopup="menu" aria-expanded={colsOpen} onClick={() => setColsOpen((o) => !o)}>
-              Spalten
-            </button>
-            <Popover open={colsOpen} onClose={() => setColsOpen(false)} align="right">
-              <div className="popover-title">Spalten anzeigen</div>
-              {(
-                [
-                  ['assignee', 'Verantwortlich'],
-                  ['due', 'Fälligkeitsdatum'],
-                  ['prio', 'Priorität'],
-                  ['status', 'Status'],
-                  ['labels', 'Labels'],
-                ] as [keyof Cols, string][]
-              ).map(([k, l]) => (
-                <label key={k} className="check-line">
-                  <input type="checkbox" checked={cols[k]} onChange={() => saveCols({ ...cols, [k]: !cols[k] })} /> {l}
-                </label>
-              ))}
-              <FieldsMenu projectId={projectId} fields={board?.fields ?? []} onChange={load} />
-            </Popover>
-          </div>
+          <ToolMenu icon={<BsCollection />} label="Gruppieren" active={groupBy !== 'section'}>
+            <FilterSelect label="Gruppieren" value={groupBy} onChange={(v) => setGroupBy(v as GroupBy)} options={GROUPS} />
+          </ToolMenu>
         )}
-        {JSON.stringify(filter) !== JSON.stringify(defaultFilter) && (
-          <button type="button" className="btn link small" onClick={() => setFilter(defaultFilter)}>
-            Zurücksetzen
-          </button>
+        {view === 'list' && (
+          <ToolMenu icon={<BsSliders />} label="Optionen" align="right">
+            <div className="popover-title">Spalten anzeigen</div>
+            {(
+              [
+                ['assignee', 'Verantwortlich'],
+                ['due', 'Fälligkeitsdatum'],
+                ['prio', 'Priorität'],
+                ['status', 'Status'],
+                ['labels', 'Labels'],
+              ] as [keyof Cols, string][]
+            ).map(([k, l]) => (
+              <label key={k} className="check-line">
+                <input type="checkbox" checked={cols[k]} onChange={() => saveCols({ ...cols, [k]: !cols[k] })} /> {l}
+              </label>
+            ))}
+            <FieldsMenu projectId={projectId} fields={board?.fields ?? []} onChange={load} />
+          </ToolMenu>
         )}
       </div>}
       {error && <div className="banner">{error}</div>}
       {view === 'overview' ? <OverviewView m={model} onDescription={(description) => updateProject({ description })} /> : view === 'list' ? <ListView m={model} /> : view === 'board' ? <BoardView m={model} /> : view === 'timeline' ? <TimelineView m={model} /> : view === 'dashboard' ? <DashboardView m={model} /> : <CalendarView m={model} />}
+    </div>
+  );
+}
+
+function ToolMenu({ icon, label, active, align = 'right', children }: { icon: React.ReactNode; label: string; active?: boolean; align?: 'left' | 'right'; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="anchor">
+      <button type="button" className={`tool-btn ${active ? 'active' : ''}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {icon} {label}
+      </button>
+      <Popover open={open} onClose={() => setOpen(false)} align={align}>
+        <div className="tool-pop">{children}</div>
+      </Popover>
     </div>
   );
 }
