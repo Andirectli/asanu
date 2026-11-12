@@ -1,12 +1,92 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BsArrowLeft, BsArrowRight, BsCheckCircle, BsChevronDown, BsChevronRight, BsBell, BsHouse, BsPlus, BsSearch } from 'react-icons/bs';
+import { BsBell, BsCheckCircle, BsChevronDown, BsChevronLeft, BsChevronRight, BsGrid1X2Fill, BsHouse, BsList, BsPlus, BsSearch } from 'react-icons/bs';
 import { errorText } from './api';
 import { useApp, useServerEvents } from './ctx';
 import { modKey } from './platform';
-import { COLORS, Popover, ProjectIcon } from './ui';
+import { Avatar, COLORS, Popover, ProjectIcon } from './ui';
+
+/** Top bar like Asana: menu, create, history, search in the middle. Doubles as the window drag area. */
+export function Topbar() {
+  const { route, go, create: openCreate } = useApp();
+  const [q, setQ] = useState(route.page === 'search' ? route.q : '');
+  const [collapsed, setCollapsed] = useState(() => document.documentElement.classList.contains('nav-collapsed'));
+  const toggle = () => {
+    const on = document.documentElement.classList.toggle('nav-collapsed');
+    setCollapsed(on);
+    try {
+      localStorage.setItem('asanu-nav-collapsed', on ? '1' : '');
+    } catch {
+      /* ignore */
+    }
+  };
+  const current = route.page === 'project' ? route.projectId : 0;
+  return (
+    <header className="topbar" data-tauri-drag-region>
+      <button type="button" className="top-icon" aria-label="Navigation ein- oder ausblenden" aria-pressed={collapsed} onClick={toggle}>
+        <BsList size={20} />
+      </button>
+      <button type="button" className="create-btn" onClick={() => openCreate(current || undefined)} title={`${modKey}⇧N`}>
+        <span className="create-plus">
+          <BsPlus size={18} />
+        </span>
+        Erstellen
+      </button>
+      <span className="top-nav" data-tauri-drag-region>
+        <button type="button" className="top-icon" aria-label="Zurück" title={`Zurück (${modKey}[)`} onClick={() => history.back()}>
+          <BsChevronLeft />
+        </button>
+        <button type="button" className="top-icon" aria-label="Vor" title={`Vor (${modKey}])`} onClick={() => history.forward()}>
+          <BsChevronRight />
+        </button>
+      </span>
+      <form
+        className="top-search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          go({ page: 'search', q: q.trim() });
+        }}
+      >
+        <BsSearch aria-hidden />
+        <input id="global-search" type="search" placeholder={`Suchen (${modKey}K)`} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Aufgaben suchen" />
+      </form>
+      <span className="top-right" data-tauri-drag-region />
+    </header>
+  );
+}
+
+/** Narrow icon rail: section switcher on top, account at the bottom. */
+export function Rail() {
+  const { user, online, api, logout, route } = useApp();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rail" role="presentation">
+      <a href="#/" className="rail-item selected" aria-label="Arbeit" aria-current="page" data-section={route.page}>
+        <span className="rail-icon">
+          <BsGrid1X2Fill />
+        </span>
+        Arbeit
+      </a>
+      <span className="spacer" />
+      <div className="anchor rail-account">
+        <button type="button" className="rail-avatar" aria-label={`Konto: ${user.name}`} aria-haspopup="dialog" onClick={() => setOpen((o) => !o)}>
+          <Avatar user={user} size={28} />
+          <span className={`conn ${online ? 'on' : 'off'}`} title={online ? `Verbunden mit ${api.server}` : 'Keine Live-Verbindung – verbinde neu …'} />
+        </button>
+        <Popover open={open} onClose={() => setOpen(false)}>
+          <div className="popover-title">{user.name}</div>
+          <div className="muted small account-line">{user.email}</div>
+          <div className="muted small account-line">{online ? `Verbunden mit ${api.server}` : 'Getrennt – verbinde neu …'}</div>
+          <button type="button" className="menu-line" onClick={logout}>
+            Abmelden
+          </button>
+        </Popover>
+      </div>
+    </div>
+  );
+}
 
 export function Sidebar() {
-  const { projects, route, go, api, run, reloadProjects, online, user, logout, create: openCreate } = useApp();
+  const { projects, route, api, run, reloadProjects, go, user, online } = useApp();
   const [unread, setUnread] = useState(0);
   const loadUnread = useCallback(() => {
     api.inbox().then((l) => setUnread(l.filter((n) => !n.read).length)).catch(() => {});
@@ -16,7 +96,6 @@ export function Sidebar() {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [showArchived, setShowArchived] = useState(false);
-  const [q, setQ] = useState(route.page === 'search' ? route.q : '');
   const [sort, setSort] = useState<'manual' | 'alpha' | 'recent'>(() => (localStorage.getItem('asanu-nav-sort') as 'manual' | 'alpha' | 'recent') || 'manual');
   const [sortOpen, setSortOpen] = useState(false);
   const [recent, setRecent] = useState<Record<number, number>>(() => {
@@ -129,41 +208,12 @@ export function Sidebar() {
 
   return (
     <nav className="sidebar" aria-label="Navigation">
-      <div className="sidebar-top" data-tauri-drag-region>
-        <img src="/logo.svg" alt="" width={22} data-tauri-drag-region />
-        <span className="brand" data-tauri-drag-region>
-          Asanu
-        </span>
-        <span className="spacer" data-tauri-drag-region />
-        <button type="button" className="icon-btn dark" aria-label="Zurück" title={`Zurück (${modKey}[)`} onClick={() => history.back()}>
-          <BsArrowLeft />
-        </button>
-        <button type="button" className="icon-btn dark" aria-label="Vor" title={`Vor (${modKey}])`} onClick={() => history.forward()}>
-          <BsArrowRight />
-        </button>
-      </div>
-      <button type="button" className="create-btn" onClick={() => openCreate(current || undefined)} title={`${modKey}⇧N`}>
-        <span className="create-plus">
-          <BsPlus size={18} />
-        </span>
-        Erstellen
-      </button>
-      <form
-        className="sidebar-search"
-        onSubmit={(e) => {
-          e.preventDefault();
-          go({ page: 'search', q: q.trim() });
-        }}
-      >
-        <BsSearch aria-hidden />
-        <input id="global-search" type="search" placeholder={`Suchen (${modKey}K)`} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Aufgaben suchen" />
-      </form>
-
+      <div className="panel-title">Arbeit</div>
       <div className="sidebar-scroll">
         <ul className="nav-list main-nav">
           <li>
             <a href="#/" className={`nav-item ${route.page === 'home' ? 'selected' : ''}`} aria-current={route.page === 'home' ? 'page' : undefined}>
-              <BsHouse /> Startseite
+              <BsHouse /> Home
             </a>
           </li>
           <li>
@@ -246,15 +296,6 @@ export function Sidebar() {
         )}
       </div>
 
-      <div className="sidebar-footer">
-        <span className={`conn ${online ? 'on' : 'off'}`} title={online ? `Verbunden mit ${api.server}` : 'Keine Live-Verbindung – verbinde neu …'} />
-        <span className="ellipsis" title={user.email}>
-          {online ? user.name : 'Getrennt – verbinde neu …'}
-        </span>
-        <button type="button" className="btn dark small" onClick={logout}>
-          Abmelden
-        </button>
-      </div>
       {server && (
         <div className="sidebar-version">
           <span className="muted-dark">Server {server.version}</span>

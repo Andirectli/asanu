@@ -8,7 +8,7 @@ import { AppCtx, type Ctx, parseRoute, type Route, routeHash, type Toast } from 
 import { isMod } from './platform';
 import { ProjectView } from './ProjectView';
 import { SearchView } from './SearchView';
-import { Sidebar } from './Sidebar';
+import { Rail, Sidebar, Topbar } from './Sidebar';
 import { TaskDetailPane } from './TaskDetail';
 
 export function Workspace({ api, user, onLogout }: { api: Api; user: User; onLogout: (serverSide: boolean) => void }) {
@@ -150,7 +150,10 @@ export function Workspace({ api, user, onLogout }: { api: Api; user: User; onLog
 
   return (
     <AppCtx.Provider value={ctx}>
-      <div className="layout">
+      <div className="shell">
+        <Topbar />
+        <div className="layout">
+        <Rail />
         <Sidebar />
         <main className="main">
           {route.page === 'project' && <ProjectView key={route.projectId} projectId={route.projectId} view={route.view} />}
@@ -160,6 +163,7 @@ export function Workspace({ api, user, onLogout }: { api: Api; user: User; onLog
           {route.page === 'inbox' && <InboxView />}
         </main>
         {route.taskId && <TaskDetailPane key={route.taskId} taskId={route.taskId} />}
+        </div>
       </div>
       {creating && <CreateDialog projectId={creating.projectId} dueDate={creating.dueDate} onClose={() => setCreating(null)} />}
       <div className="toasts" aria-live="polite">

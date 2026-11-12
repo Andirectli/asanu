@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { FieldInput } from './FieldsMenu';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BsArrowsAngleContract, BsArrowsAngleExpand, BsCheck, BsChevronRight, BsHourglassSplit, BsTrash, BsX } from 'react-icons/bs';
+import { BsArrowUp, BsArrowsAngleContract, BsArrowsAngleExpand, BsCheck, BsChevronRight, BsHourglassSplit, BsLink45Deg, BsTrash, BsX } from 'react-icons/bs';
 import { ApiError, errorText, type Task, type TaskDetail, type TaskPatch } from './api';
 import { useApp, useServerEvents } from './ctx';
 import { isMod, modKey } from './platform';
@@ -172,6 +172,15 @@ export function TaskDetailPane({ taskId }: { taskId: number }) {
             <BsTrash />
           </button>
         )}
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="Aufgabenlink kopieren"
+          title="Aufgabenlink kopieren"
+          onClick={() => navigator.clipboard.writeText(location.href).then(() => toast('Link kopiert', 'info'), () => toast('Kopieren nicht möglich.'))}
+        >
+          <BsLink45Deg size={18} />
+        </button>
         <button type="button" className="icon-btn" aria-label={wide ? 'Verkleinern' : 'Vergrößern'} title={wide ? 'Verkleinern' : 'Vergrößern'} onClick={() => setWide(!wide)}>
           {wide ? <BsArrowsAngleContract /> : <BsArrowsAngleExpand />}
         </button>
@@ -444,7 +453,7 @@ export function TaskDetailPane({ taskId }: { taskId: number }) {
       </div>
       <div className="comment-box">
         <textarea
-          placeholder={`Kommentar schreiben … (${modKey}↩ senden)`}
+          placeholder="Kommentar schreiben oder @erwähnen …"
           value={comment}
           maxLength={10000}
           onChange={(e) => setComment(e.target.value)}
@@ -456,8 +465,8 @@ export function TaskDetailPane({ taskId }: { taskId: number }) {
           }}
           aria-label="Kommentar"
         />
-        <button type="button" className="btn primary small" disabled={!comment.trim()} onClick={addComment}>
-          Kommentieren
+        <button type="button" className="send-btn" aria-label="Kommentar senden" title={`Senden (${modKey}↩)`} disabled={!comment.trim()} onClick={addComment}>
+          <BsArrowUp />
         </button>
       </div>
     </aside>
