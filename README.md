@@ -96,7 +96,7 @@ Unterwegs funktioniert die App über dein VPN (z. B. Tailscale oder WireGuard). 
 
 ## Ehrlicher Stand
 
-Asanu ist ein privates Projekt in aktiver Entwicklung. Getestet sind Server (automatische Tests, zwei gleichzeitige Clients, Neustart, Backup, Auto-Update mit echten Images) und die Oberfläche im Browser und in der gebauten Mac-App. Noch **nicht** gebaut sind unter anderem: mehrere Projekte pro Aufgabe, Beteiligte, Anhänge, Rich-Text und Inbox. Windows ist vorbereitet, aber ungetestet. Was verglichen mit Asana fehlt, steht in [docs/ASANA-REA-BEFUND.md](docs/ASANA-REA-BEFUND.md); was geprüft wurde, in [docs/TESTBERICHT.md](docs/TESTBERICHT.md).
+Asanu ist ein privates Projekt in aktiver Entwicklung. Getestet sind Server (automatische Tests, zwei gleichzeitige Clients, Neustart, Backup, Auto-Update mit echten Images) und die Oberfläche im Browser und in der gebauten Mac-App. Noch **nicht** gebaut sind unter anderem: mehrere Projekte pro Aufgabe, Beteiligte, Anhänge und Rich-Text. Windows ist vorbereitet, aber ungetestet. Was verglichen mit Asana fehlt, steht in [docs/ASANA-REA-BEFUND.md](docs/ASANA-REA-BEFUND.md); was geprüft wurde, in [docs/TESTBERICHT.md](docs/TESTBERICHT.md).
 
 ## Mehr lesen
 
