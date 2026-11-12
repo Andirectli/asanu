@@ -49,6 +49,8 @@ func (a *API) routes() http.Handler {
 	m.HandleFunc("POST /api/projects", a.authed(a.createProject))
 	m.HandleFunc("PATCH /api/projects/{id}", a.authed(a.updateProject))
 	m.HandleFunc("GET /api/projects/{id}/board", a.authed(a.board))
+	m.HandleFunc("GET /api/projects/{id}/updates", a.authed(a.listUpdates))
+	m.HandleFunc("POST /api/projects/{id}/updates", a.authed(a.createUpdate))
 	m.HandleFunc("POST /api/projects/{id}/sections", a.authed(a.createSection))
 	m.HandleFunc("PATCH /api/sections/{id}", a.authed(a.updateSection))
 	m.HandleFunc("DELETE /api/sections/{id}", a.authed(a.deleteSection))
@@ -196,20 +198,24 @@ func now() string { return time.Now().UTC().Format("2006-01-02T15:04:05.000Z") }
 // ---- projects ----
 
 type Project struct {
-	ID        int64   `json:"id"`
-	Name      string  `json:"name"`
-	Color     string  `json:"color"`
-	Archived  bool    `json:"archived"`
-	Position  float64 `json:"position"`
-	Version   int64   `json:"version"`
-	OpenTasks int     `json:"openTasks"` // only filled by the project list
-	DueSoon   int     `json:"dueSoon"`   // open tasks due within 7 days (incl. overdue)
+	ID          int64   `json:"id"`
+	Name        string  `json:"name"`
+	Color       string  `json:"color"`
+	Archived    bool    `json:"archived"`
+	Position    float64 `json:"position"`
+	Version     int64   `json:"version"`
+	Description string  `json:"description"`
+	Status      string  `json:"status"` // status of the latest update, "" if none
+	CreatedAt   string  `json:"createdAt"`
+	OpenTasks   int     `json:"openTasks"` // only filled by the project list
+	DueSoon     int     `json:"dueSoon"`   // open tasks due within 7 days (incl. overdue)
 }
 
-const projectCols = `id,name,color,archived,position,version`
+const projectCols = `id,name,color,archived,position,version,description,created_at,
+	COALESCE((SELECT u.status FROM project_updates u WHERE u.project_id=projects.id ORDER BY u.id DESC LIMIT 1),'')`
 
 func scanProject(s interface{ Scan(...any) error }) (p Project, err error) {
-	err = s.Scan(&p.ID, &p.Name, &p.Color, &p.Archived, &p.Position, &p.Version)
+	err = s.Scan(&p.ID, &p.Name, &p.Color, &p.Archived, &p.Position, &p.Version, &p.Description, &p.CreatedAt, &p.Status)
 	return
 }
 
@@ -235,7 +241,7 @@ func (a *API) listProjects(w http.ResponseWriter, r *http.Request) {
 	out := []Project{}
 	for rows.Next() {
 		var p Project
-		err := rows.Scan(&p.ID, &p.Name, &p.Color, &p.Archived, &p.Position, &p.Version, &p.OpenTasks, &p.DueSoon)
+		err := rows.Scan(&p.ID, &p.Name, &p.Color, &p.Archived, &p.Position, &p.Version, &p.Description, &p.CreatedAt, &p.Status, &p.OpenTasks, &p.DueSoon)
 		if err != nil {
 			serverError(w, err)
 			return
@@ -321,10 +327,11 @@ func (a *API) updateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Version  int64
-		Name     *string
-		Color    *string
-		Archived *bool
+		Version     int64
+		Name        *string
+		Color       *string
+		Archived    *bool
+		Description *string
 	}
 	if !decode(w, r, &in) {
 		return
@@ -348,6 +355,13 @@ func (a *API) updateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Archived != nil {
 		sets, args = append(sets, "archived=?"), append(args, *in.Archived)
+	}
+	if in.Description != nil {
+		if utf8.RuneCountInString(*in.Description) > 20000 {
+			fail(w, 400, "description must be at most 20000 characters")
+			return
+		}
+		sets, args = append(sets, "description=?"), append(args, *in.Description)
 	}
 	if len(sets) == 0 {
 		fail(w, 400, "nothing to update")
@@ -1206,4 +1220,73 @@ func (a *API) myTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, tasks)
+}
+
+// ---- project status updates ----
+
+type ProjectUpdate struct {
+	ID        int64  `json:"id"`
+	ProjectID int64  `json:"projectId"`
+	UserID    int64  `json:"userId"`
+	UserName  string `json:"userName"`
+	Status    string `json:"status"`
+	Body      string `json:"body"`
+	CreatedAt string `json:"createdAt"`
+}
+
+func (a *API) listUpdates(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	rows, err := a.db.Query(`SELECT u.id,u.project_id,u.user_id,us.name,u.status,u.body,u.created_at
+		FROM project_updates u JOIN users us ON us.id=u.user_id WHERE u.project_id=? ORDER BY u.id DESC LIMIT 100`, id)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer rows.Close()
+	out := []ProjectUpdate{}
+	for rows.Next() {
+		var u ProjectUpdate
+		if err := rows.Scan(&u.ID, &u.ProjectID, &u.UserID, &u.UserName, &u.Status, &u.Body, &u.CreatedAt); err != nil {
+			serverError(w, err)
+			return
+		}
+		out = append(out, u)
+	}
+	writeJSON(w, 200, out)
+}
+
+func (a *API) createUpdate(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var in struct{ Status, Body string }
+	if !decode(w, r, &in) {
+		return
+	}
+	if in.Status == "" || !statuses[in.Status] {
+		fail(w, 400, "status must be on_track, at_risk or off_track")
+		return
+	}
+	body, err := text("body", in.Body, 0, 10000)
+	if err != nil {
+		fail(w, 400, err.Error())
+		return
+	}
+	u := userFrom(r)
+	res, err := a.db.Exec(`INSERT INTO project_updates(project_id,user_id,status,body) SELECT id,?,?,? FROM projects WHERE id=?`, u.ID, in.Status, body, id)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		fail(w, 404, "project not found")
+		return
+	}
+	uid, _ := res.LastInsertId()
+	a.events.publish(Event{Type: "project", ID: id, ProjectID: id})
+	writeJSON(w, 201, ProjectUpdate{ID: uid, ProjectID: id, UserID: u.ID, UserName: u.Name, Status: in.Status, Body: body, CreatedAt: now()})
 }

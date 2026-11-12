@@ -3,7 +3,7 @@
 name: asanu
 services:
   asanu:
-    image: ghcr.io/andirectli/asanu-server:0.2.1   # update = raise the version
+    image: ghcr.io/andirectli/asanu-server:0.3.0   # update = raise the version
     container_name: asanu
     restart: unless-stopped
     ports:

@@ -51,7 +51,7 @@ cd app && npm run typecheck
 cd app && npm ci && npm run tauri build
 ```
 
-Ergebnis: `app/src-tauri/target/release/bundle/macos/Asanu.app` und `app/src-tauri/target/release/bundle/dmg/Asanu_0.2.0_aarch64.dmg`.
+Ergebnis: `app/src-tauri/target/release/bundle/macos/Asanu.app` und `app/src-tauri/target/release/bundle/dmg/Asanu_0.3.0_aarch64.dmg`.
 
 ### Installation auf dem Mac
 
@@ -68,7 +68,7 @@ Für Intel-Macs: `npm run tauri build -- --target x86_64-apple-darwin` (vorher `
 |---|---|
 | ⌘K | Suche fokussieren |
 | ⌘N | Neue Aufgabe im ersten Abschnitt |
-| ⌘1 / ⌘2 / ⌘3 | Liste / Board / Kalender |
+| ⌘0 / ⌘1 / ⌘2 / ⌘3 / ⌘4 | Übersicht / Liste / Board / Timeline / Kalender |
 | ⌘⇧N | Aufgabe erstellen (Dialog, auch aus jeder Ansicht) |
 | ⌘[ / ⌘] | Zurück / Vor |
 | ⌘↩ | Geöffnete Aufgabe erledigt/offen (im Kommentarfeld: Kommentar senden) |

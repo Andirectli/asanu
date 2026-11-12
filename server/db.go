@@ -92,6 +92,17 @@ var migrations = []string{
 		CHECK (task_id <> blocked_by_id)
 	);
 	CREATE INDEX task_deps_blocker ON task_deps(blocked_by_id);`,
+	// v0.3: project description and status updates (project overview page)
+	`ALTER TABLE projects ADD COLUMN description TEXT NOT NULL DEFAULT '';
+	CREATE TABLE project_updates (
+		id INTEGER PRIMARY KEY,
+		project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+		user_id INTEGER NOT NULL REFERENCES users(id),
+		status TEXT NOT NULL,
+		body TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+	);
+	CREATE INDEX project_updates_project ON project_updates(project_id, id);`,
 }
 
 func openDB(path string) (*sql.DB, error) {

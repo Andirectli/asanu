@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef } from 'react';
 import type { Api, Label, Project, ServerEvent, User } from './api';
 
-export type ProjectTab = 'list' | 'board' | 'calendar';
+export type ProjectTab = 'overview' | 'list' | 'board' | 'timeline' | 'calendar';
 export type Route =
   | { page: 'project'; projectId: number; view: ProjectTab; taskId?: number }
   | { page: 'search'; q: string; taskId?: number }
@@ -12,7 +12,7 @@ export function parseRoute(hash: string): Route {
   const [path, query = ''] = hash.replace(/^#/, '').split('?');
   const qs = new URLSearchParams(query);
   const taskId = Number(qs.get('task')) || undefined;
-  const m = path.match(/^\/project\/(\d+)(?:\/(list|board|calendar))?/);
+  const m = path.match(/^\/project\/(\d+)(?:\/(overview|list|board|timeline|calendar))?/);
   if (m) return { page: 'project', projectId: Number(m[1]), view: (m[2] as ProjectTab) ?? 'list', taskId };
   if (path.startsWith('/my')) return { page: 'my', taskId };
   if (path.startsWith('/search')) return { page: 'search', q: qs.get('q') ?? '', taskId };

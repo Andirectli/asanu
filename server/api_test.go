@@ -410,3 +410,39 @@ func TestBackupToStdout(t *testing.T) {
 		t.Fatalf("temp file left: %v", left)
 	}
 }
+
+func TestProjectOverviewStatusAndDescription(t *testing.T) {
+	srv, stop := setup(t, filepath.Join(t.TempDir(), "asanu.db"))
+	defer stop()
+	c := &client{t: t, base: srv.URL}
+	c.login("me@home.lan", "correct-horse-1")
+	var p Project
+	c.do("POST", "/api/projects", map[string]string{"name": "P", "color": "#4573d2"}, &p)
+	if p.Status != "" || p.CreatedAt == "" {
+		t.Fatalf("new project: %+v", p)
+	}
+	for _, bad := range []map[string]string{{"status": ""}, {"status": "great"}} {
+		if code := c.do("POST", fmt.Sprintf("/api/projects/%d/updates", p.ID), bad, nil); code != 400 {
+			t.Fatalf("bad update %v: %d", bad, code)
+		}
+	}
+	if code := c.do("POST", "/api/projects/999/updates", map[string]string{"status": "on_track"}, nil); code != 404 {
+		t.Fatalf("unknown project: %d", code)
+	}
+	c.do("POST", fmt.Sprintf("/api/projects/%d/updates", p.ID), map[string]string{"status": "on_track", "body": "läuft"}, nil)
+	c.do("POST", fmt.Sprintf("/api/projects/%d/updates", p.ID), map[string]string{"status": "at_risk", "body": "Lieferung verzögert"}, nil)
+	var ups []ProjectUpdate
+	c.do("GET", fmt.Sprintf("/api/projects/%d/updates", p.ID), nil, &ups)
+	if len(ups) != 2 || ups[0].Status != "at_risk" || ups[0].UserName != "Ich" {
+		t.Fatalf("updates (newest first): %+v", ups)
+	}
+	var d Project
+	if code := c.do("PATCH", fmt.Sprintf("/api/projects/%d", p.ID), map[string]any{"version": p.Version, "description": "Bad renovieren"}, &d); code != 200 || d.Description != "Bad renovieren" || d.Status != "at_risk" {
+		t.Fatalf("description: %d %+v", code, d)
+	}
+	var ps []Project
+	c.do("GET", "/api/projects", nil, &ps)
+	if ps[0].Status != "at_risk" || ps[0].Description != "Bad renovieren" {
+		t.Fatalf("list: %+v", ps[0])
+	}
+}

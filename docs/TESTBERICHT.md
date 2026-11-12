@@ -103,3 +103,15 @@ Die amd64-Werte enthalten den Aufschlag der Rosetta-Emulation; auf einem echten 
 | Image `asanu-server:0.2.0` (amd64) gebaut, Container *healthy*, Export 4,9 MB | ok |
 
 Grenzen 0.2: Verschieben zwischen Abschnitten geht per Maus; per Tastatur nur innerhalb eines Abschnitts (Verhalten der Drag-&-Drop-Bibliothek bei untereinanderliegenden Listen). Reihenfolge innerhalb eines „Meine Aufgaben"-Abschnitts folgt dem Datum, nicht manuell. Fehlertexte des Servers (z. B. Zyklus) erscheinen auf Englisch im Hinweis. Konflikt-Dialog weiterhin nicht per UI ausgelöst.
+
+## Version 0.3.0 (Timeline, Projekt-Übersicht)
+
+| Prüfung | Ergebnis |
+|---|---|
+| Server-Test: Statusmeldungen (ungültig/unbekanntes Projekt → 400/404), Verlauf neueste zuerst, Beschreibung per PATCH, Projektliste mit Status | bestanden |
+| Migration 2 → 3 auf der bestehenden Testdatenbank | ok |
+| Browser (dunkel): Timeline zeigt Balken Start→Fällig, Titel neben kurzen Balken, Heute-Linie, Tages-Zoom | ok |
+| Browser: Übersicht – Status „Gefährdet" mit Notiz gemeldet → Chip im Projektkopf, Eintrag im Verlauf | ok |
+| `tsc`, `tauri build` → Asanu_0.3.0_aarch64.dmg; Image `ghcr.io/andirectli/asanu-server:0.3.0` (amd64+arm64) hochgeladen, anonym abrufbar (HTTP 200) | ok |
+
+Nicht geprüft: native App 0.3.0 gestartet, Timeline mit sehr vielen oder sehr weit auseinanderliegenden Aufgaben, Balken ziehen (nicht gebaut). Neue App gegen alten Server 0.2.x: Übersicht-Funktionen melden dann Fehler, der Rest läuft.

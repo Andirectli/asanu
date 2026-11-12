@@ -1,13 +1,15 @@
 import type { DropResult } from '@hello-pangea/dnd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BsArchive, BsBoxArrowUpLeft, BsCalendar3, BsKanban, BsListUl } from 'react-icons/bs';
+import { BsArchive, BsBoxArrowUpLeft, BsCalendar3, BsKanban, BsListUl, BsReverseLayoutTextSidebarReverse } from 'react-icons/bs';
 import { ApiError, type Board, type Section, type Task } from './api';
 import { BoardView } from './BoardView';
 import { CalendarView } from './CalendarView';
+import { OverviewView } from './OverviewView';
+import { TimelineView } from './TimelineView';
 import { type ProjectTab, useApp, useServerEvents } from './ctx';
 import { ListView } from './ListView';
 import { isMod, modKey } from './platform';
-import { ColorGrid, dueState, InlineEdit, Popover, PRIORITIES } from './ui';
+import { ColorGrid, dueState, InlineEdit, Popover, PRIORITIES, STATUSES } from './ui';
 
 export type Filter = { status: 'open' | 'done' | 'all'; priority: string; label: number; due: '' | 'overdue' | 'today' | 'week' | 'none'; assignee: '' | 'me' | 'none' };
 const defaultFilter: Filter = { status: 'open', priority: '', label: 0, due: '', assignee: '' };
@@ -85,7 +87,7 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!isMod(e)) return;
-      const tab = ({ '1': 'list', '2': 'board', '3': 'calendar' } as Record<string, ProjectTab>)[e.key];
+      const tab = ({ '0': 'overview', '1': 'list', '2': 'board', '3': 'timeline', '4': 'calendar' } as Record<string, ProjectTab>)[e.key];
       if (tab) {
         e.preventDefault();
         go({ page: 'project', projectId, view: tab });
@@ -182,7 +184,7 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
         <div className="project-title-row">
           <div className="anchor">
             <button type="button" className="project-icon" style={{ background: p.color }} aria-label="Projektfarbe ändern" onClick={() => setColorOpen((o) => !o)}>
-              {view === 'board' ? <BsKanban color="#fff" /> : view === 'calendar' ? <BsCalendar3 color="#fff" /> : <BsListUl color="#fff" />}
+              {view === 'overview' ? <BsListUl color="#fff" /> : view === 'board' ? <BsKanban color="#fff" /> : view === 'calendar' ? <BsCalendar3 color="#fff" /> : view === 'timeline' ? <BsReverseLayoutTextSidebarReverse color="#fff" /> : <BsListUl color="#fff" />}
             </button>
             <Popover open={colorOpen} onClose={() => setColorOpen(false)}>
               <div className="popover-title">Farbe</div>
@@ -196,6 +198,9 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
             </Popover>
           </div>
           <InlineEdit className="project-name" value={p.name} ariaLabel="Projektname" onSave={(name) => updateProject({ name })} />
+          <a href={`#/project/${p.id}/overview`} className={`project-status ${p.status ? `status-${p.status}` : ''}`} title="Status melden">
+            <span className={`status-dot ${p.status ? `dot-${p.status}` : 'dot-none'}`} /> {p.status ? STATUSES.find((x) => x.value === p.status)?.label : 'Status setzen'}
+          </a>
           {p.archived && <span className="pill archived-pill">Archiviert</span>}
           <span className="spacer" />
           <button type="button" className="btn small" onClick={() => updateProject({ archived: !p.archived })}>
@@ -203,18 +208,24 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
           </button>
         </div>
         <div className="tabs" role="tablist">
+          <a role="tab" aria-selected={view === 'overview'} className={view === 'overview' ? 'active' : ''} href={`#/project/${p.id}/overview`} title={`${modKey}0`}>
+            Übersicht
+          </a>
           <a role="tab" aria-selected={view === 'list'} className={view === 'list' ? 'active' : ''} href={`#/project/${p.id}/list`} title={`${modKey}1`}>
             Liste
           </a>
           <a role="tab" aria-selected={view === 'board'} className={view === 'board' ? 'active' : ''} href={`#/project/${p.id}/board`} title={`${modKey}2`}>
             Board
           </a>
-          <a role="tab" aria-selected={view === 'calendar'} className={view === 'calendar' ? 'active' : ''} href={`#/project/${p.id}/calendar`} title={`${modKey}3`}>
+          <a role="tab" aria-selected={view === 'timeline'} className={view === 'timeline' ? 'active' : ''} href={`#/project/${p.id}/timeline`} title={`${modKey}3`}>
+            Timeline
+          </a>
+          <a role="tab" aria-selected={view === 'calendar'} className={view === 'calendar' ? 'active' : ''} href={`#/project/${p.id}/calendar`} title={`${modKey}4`}>
             Kalender
           </a>
         </div>
       </header>
-      <div className="toolbar">
+      {view !== 'overview' && <div className="toolbar">
         <button type="button" className="btn primary small" data-add-task onClick={() => {
             const input = document.querySelector<HTMLInputElement>('[data-add-input]');
             if (input) input.focus();
@@ -228,7 +239,7 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
         <FilterSelect label="Label" value={String(filter.label)} onChange={(v) => setFilter({ ...filter, label: Number(v) })} options={[['0', 'Alle'], ...[...labels.values()].map((l) => [String(l.id), l.name] as [string, string])]} />
         <FilterSelect label="Zuständig" value={filter.assignee} onChange={(v) => setFilter({ ...filter, assignee: v as Filter['assignee'] })} options={[['', 'Alle'], ['me', 'Ich'], ['none', 'Niemand']]} />
         <FilterSelect label="Fällig" value={filter.due} onChange={(v) => setFilter({ ...filter, due: v as Filter['due'] })} options={[['', 'Egal'], ['overdue', 'Überfällig'], ['today', 'Bis heute'], ['week', 'Nächste 7 Tage'], ['none', 'Ohne Datum']]} />
-        {view !== 'calendar' && (
+        {(view === 'list' || view === 'board') && (
           <FilterSelect label="Sortieren" value={sort} onChange={(v) => setSort(v as Sort)} options={[['manual', 'Manuell'], ['due', 'Fälligkeit'], ['priority', 'Priorität'], ['title', 'Name']]} />
         )}
         {JSON.stringify(filter) !== JSON.stringify(defaultFilter) && (
@@ -236,9 +247,9 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
             Zurücksetzen
           </button>
         )}
-      </div>
+      </div>}
       {error && <div className="banner">{error}</div>}
-      {view === 'list' ? <ListView m={model} /> : view === 'board' ? <BoardView m={model} /> : <CalendarView m={model} />}
+      {view === 'overview' ? <OverviewView m={model} onDescription={(description) => updateProject({ description })} /> : view === 'list' ? <ListView m={model} /> : view === 'board' ? <BoardView m={model} /> : view === 'timeline' ? <TimelineView m={model} /> : <CalendarView m={model} />}
     </div>
   );
 }
