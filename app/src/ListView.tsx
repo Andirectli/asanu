@@ -6,7 +6,7 @@ import { useApp } from './ctx';
 import type { BoardModel } from './ProjectView';
 import { Avatar, CheckCircle, DueText, InlineEdit, LabelPills, PriorityPill, StatusPill } from './ui';
 
-const COL_W = { assignee: '84px', due: '120px', prio: '92px', status: '96px', labels: 'minmax(110px, 200px)' } as const;
+const COL_W = { assignee: '118px', due: '120px', prio: '92px', status: '96px', labels: 'minmax(110px, 200px)' } as const;
 
 export function ListView({ m }: { m: BoardModel }) {
   const template = ['minmax(240px, 1fr)', ...(Object.keys(COL_W) as (keyof typeof COL_W)[]).filter((k) => m.cols[k]).map((k) => COL_W[k])].join(' ');

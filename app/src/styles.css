@@ -130,7 +130,7 @@ h1, h3 { margin: 0; }
 
 /* list view */
 .list-view { flex: 1; overflow: auto; padding-bottom: 80px; }
-.list-view { --cols: minmax(240px, 1fr) 84px 120px 92px 96px minmax(110px, 200px); }
+.list-view { --cols: minmax(240px, 1fr) 118px 120px 92px 96px minmax(110px, 200px); }
 .list-head, .task-row { display: grid; grid-template-columns: var(--cols); align-items: center; }
 .list-head { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); height: 36px; font-size: 12px; color: var(--muted); padding: 0 24px 0 40px; }
 .list-head > span, .task-row > span { padding: 0 8px; }
@@ -492,3 +492,7 @@ select.status-select { border-color: transparent !important; font-weight: 500; }
 .tl-diamond { width: 16px; height: 16px; flex: 0 0 16px; transform: rotate(45deg) scale(.85); border-radius: 3px; background: #f1bd6c; }
 .tl-milestone.selected .tl-diamond { outline: 2px solid var(--primary); }
 .tl-milestone.completed { opacity: .55; }
+
+button.filter { border: none; background: none; cursor: pointer; font-size: 13px; }
+button.filter:hover { background: var(--bg-hover); }
+.list-head > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
