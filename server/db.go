@@ -108,6 +108,13 @@ var migrations = []string{
 		created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 	);
 	CREATE INDEX project_updates_project ON project_updates(project_id, id);`,
+	// v0.5: project icon, per-user favourite projects
+	`ALTER TABLE projects ADD COLUMN icon TEXT NOT NULL DEFAULT 'list';
+	CREATE TABLE favorites (
+		user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+		PRIMARY KEY (user_id, project_id)
+	);`,
 }
 
 func openDB(path string) (*sql.DB, error) {

@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ProjectUpdate, Status } from './api';
+import type { ProjectStatus, ProjectUpdate } from './api';
 import { useApp, useServerEvents } from './ctx';
 import type { BoardModel } from './ProjectView';
-import { Avatar, STATUSES } from './ui';
+import { Avatar, PROJECT_STATUSES, projectStatusLabel } from './ui';
 
-const CHOICES = STATUSES.filter((s) => s.value);
 
 /** Project overview: describe the project, report a status, see the history (Asana's "Overview" tab). */
 export function OverviewView({ m, onDescription }: { m: BoardModel; onDescription: (text: string) => Promise<boolean> }) {
   const { api, run, users } = useApp();
   const p = m.board.project;
   const [updates, setUpdates] = useState<ProjectUpdate[]>([]);
-  const [pick, setPick] = useState<Status>('');
+  const [pick, setPick] = useState<ProjectStatus>('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [desc, setDesc] = useState<string | null>(null);
@@ -89,7 +88,7 @@ export function OverviewView({ m, onDescription }: { m: BoardModel; onDescriptio
       <aside className="overview-side">
         <h2>Wie ist der Status?</h2>
         <div className="status-picks" role="radiogroup" aria-label="Status wählen">
-          {CHOICES.map((s) => (
+          {PROJECT_STATUSES.map((s) => (
             <button key={s.value} type="button" role="radio" aria-checked={pick === s.value} className={`status-pick ${pick === s.value ? `on status-${s.value}` : ''}`} onClick={() => setPick(s.value)}>
               <span className={`status-dot dot-${s.value}`} /> {s.label}
             </button>
@@ -114,7 +113,7 @@ export function OverviewView({ m, onDescription }: { m: BoardModel; onDescriptio
               <Avatar user={users.get(u.userId)} size={26} />
               <div>
                 <div>
-                  <span className={`pill status-${u.status}`}>{CHOICES.find((c) => c.value === u.status)?.label}</span>
+                  <span className={`pill status-${u.status}`}>{projectStatusLabel(u.status)}</span>
                 </div>
                 {u.body && <p className="comment-body">{u.body}</p>}
                 <div className="muted small">

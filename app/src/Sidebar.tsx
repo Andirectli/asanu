@@ -3,7 +3,7 @@ import { BsArrowLeft, BsArrowRight, BsCheckCircle, BsChevronDown, BsChevronRight
 import { errorText } from './api';
 import { useApp } from './ctx';
 import { modKey } from './platform';
-import { COLORS } from './ui';
+import { COLORS, Popover, ProjectIcon } from './ui';
 
 export function Sidebar() {
   const { projects, route, go, api, run, reloadProjects, online, user, logout, create: openCreate } = useApp();
@@ -11,6 +11,15 @@ export function Sidebar() {
   const [name, setName] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [q, setQ] = useState(route.page === 'search' ? route.q : '');
+  const [sort, setSort] = useState<'manual' | 'alpha' | 'recent'>(() => (localStorage.getItem('asanu-nav-sort') as 'manual' | 'alpha' | 'recent') || 'manual');
+  const [sortOpen, setSortOpen] = useState(false);
+  const [recent, setRecent] = useState<Record<number, number>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('asanu-recent') || '{}');
+    } catch {
+      return {};
+    }
+  });
   const [server, setServer] = useState<{ version: string; updater: boolean } | null>(null);
   const [updating, setUpdating] = useState(false);
   const { toast } = useApp();
@@ -62,7 +71,32 @@ export function Sidebar() {
     }
   };
 
-  const active = projects.filter((p) => !p.archived);
+  const current0 = route.page === 'project' ? route.projectId : 0;
+  useEffect(() => {
+    if (!current0) return;
+    setRecent((r) => {
+      const next = { ...r, [current0]: Date.now() };
+      try {
+        localStorage.setItem('asanu-recent', JSON.stringify(next));
+      } catch {
+        /* private mode: sorting by recent just won't persist */
+      }
+      return next;
+    });
+  }, [current0]);
+  const pick = (v: 'manual' | 'alpha' | 'recent') => {
+    setSort(v);
+    setSortOpen(false);
+    try {
+      localStorage.setItem('asanu-nav-sort', v);
+    } catch {
+      /* ignore */
+    }
+  };
+  const sorted = (list: typeof projects) =>
+    sort === 'alpha' ? [...list].sort((a, b) => a.name.localeCompare(b.name, 'de')) : sort === 'recent' ? [...list].sort((a, b) => (recent[b.id] ?? 0) - (recent[a.id] ?? 0)) : list;
+  const active = sorted(projects.filter((p) => !p.archived));
+  const favorites = projects.filter((p) => !p.archived && p.favorite);
   const archived = projects.filter((p) => p.archived);
   const current = route.page === 'project' ? route.projectId : 0;
 
@@ -81,7 +115,7 @@ export function Sidebar() {
   const item = (p: (typeof projects)[number]) => (
     <li key={p.id}>
       <a href={`#/project/${p.id}/list`} className={`nav-item ${p.id === current ? 'selected' : ''}`} aria-current={p.id === current ? 'page' : undefined}>
-        <span className="project-dot" style={{ background: p.color }} />
+        <ProjectIcon icon={p.icon} color={p.color} size={18} />
         <span className="ellipsis">{p.name}</span>
       </a>
     </li>
@@ -132,11 +166,35 @@ export function Sidebar() {
             </a>
           </li>
         </ul>
-        <div className="nav-heading">
-          <span>Projekte</span>
+        {favorites.length > 0 && (
+          <>
+            <div className="nav-heading">
+              <span>Favoriten</span>
+            </div>
+            <ul className="nav-list">{favorites.map(item)}</ul>
+          </>
+        )}
+        <div className="nav-heading anchor">
+          <button type="button" className="nav-sort" aria-haspopup="menu" aria-expanded={sortOpen} onClick={() => setSortOpen((o) => !o)} title="Projekte sortieren">
+            Projekte <span className="muted-dark">· {sort === 'manual' ? 'Manuell' : sort === 'alpha' ? 'A–Z' : 'Zuletzt'}</span>
+          </button>
           <button type="button" className="icon-btn dark" aria-label="Neues Projekt" title="Neues Projekt" onClick={() => setAdding(true)}>
             <BsPlus size={18} />
           </button>
+          <Popover open={sortOpen} onClose={() => setSortOpen(false)}>
+            <div className="popover-title">Sortieren</div>
+            {(
+              [
+                ['manual', 'Manuell'],
+                ['alpha', 'Alphabetisch'],
+                ['recent', 'Zuletzt geöffnet'],
+              ] as const
+            ).map(([k, l]) => (
+              <button key={k} type="button" role="menuitemradio" aria-checked={sort === k} className="menu-line" onClick={() => pick(k)}>
+                {sort === k ? '✓' : ''} {l}
+              </button>
+            ))}
+          </Popover>
         </div>
         <ul className="nav-list">
           {active.map(item)}

@@ -1,6 +1,6 @@
 import type { DropResult } from '@hello-pangea/dnd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BsArchive, BsBoxArrowUpLeft, BsCalendar3, BsKanban, BsListUl, BsReverseLayoutTextSidebarReverse } from 'react-icons/bs';
+import { BsArchive, BsBoxArrowUpLeft, BsStar, BsStarFill } from 'react-icons/bs';
 import { ApiError, type Board, type Section, type Task } from './api';
 import { BoardView } from './BoardView';
 import { CalendarView } from './CalendarView';
@@ -9,7 +9,7 @@ import { TimelineView } from './TimelineView';
 import { type ProjectTab, useApp, useServerEvents } from './ctx';
 import { ListView } from './ListView';
 import { isMod, modKey } from './platform';
-import { ColorGrid, dueState, InlineEdit, Popover, PRIORITIES, STATUSES } from './ui';
+import { ColorGrid, dueState, IconGrid, InlineEdit, Popover, PRIORITIES, ProjectIcon, projectStatusLabel } from './ui';
 
 export type Filter = { status: 'open' | 'done' | 'all'; priority: string; label: number; due: '' | 'overdue' | 'today' | 'week' | 'none'; assignee: '' | 'me' | 'none' };
 const defaultFilter: Filter = { status: 'open', priority: '', label: 0, due: '', assignee: '' };
@@ -183,8 +183,8 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
       <header className="project-header" data-tauri-drag-region>
         <div className="project-title-row">
           <div className="anchor">
-            <button type="button" className="project-icon" style={{ background: p.color }} aria-label="Projektfarbe ändern" onClick={() => setColorOpen((o) => !o)}>
-              {view === 'overview' ? <BsListUl color="#fff" /> : view === 'board' ? <BsKanban color="#fff" /> : view === 'calendar' ? <BsCalendar3 color="#fff" /> : view === 'timeline' ? <BsReverseLayoutTextSidebarReverse color="#fff" /> : <BsListUl color="#fff" />}
+            <button type="button" className="icon-plain" aria-label="Farbe und Symbol ändern" onClick={() => setColorOpen((o) => !o)}>
+              <ProjectIcon icon={p.icon} color={p.color} size={30} />
             </button>
             <Popover open={colorOpen} onClose={() => setColorOpen(false)}>
               <div className="popover-title">Farbe</div>
@@ -195,12 +195,35 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
                   updateProject({ color });
                 }}
               />
+              <div className="popover-title" style={{ marginTop: 10 }}>
+                Symbol
+              </div>
+              <IconGrid
+                value={p.icon}
+                onPick={(icon) => {
+                  setColorOpen(false);
+                  updateProject({ icon });
+                }}
+              />
             </Popover>
           </div>
           <InlineEdit className="project-name" value={p.name} ariaLabel="Projektname" onSave={(name) => updateProject({ name })} />
           <a href={`#/project/${p.id}/overview`} className={`project-status ${p.status ? `status-${p.status}` : ''}`} title="Status melden">
-            <span className={`status-dot ${p.status ? `dot-${p.status}` : 'dot-none'}`} /> {p.status ? STATUSES.find((x) => x.value === p.status)?.label : 'Status setzen'}
+            <span className={`status-dot ${p.status ? `dot-${p.status}` : 'dot-none'}`} /> {p.status ? projectStatusLabel(p.status) : 'Status setzen'}
           </a>
+          <button
+            type="button"
+            className={`icon-btn star-btn ${p.favorite ? 'on' : ''}`}
+            aria-pressed={p.favorite}
+            aria-label={p.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+            title={p.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+            onClick={async () => {
+              await run(api.setFavorite(p.id, !p.favorite));
+              await Promise.all([load(), reloadProjects()]);
+            }}
+          >
+            {p.favorite ? <BsStarFill /> : <BsStar />}
+          </button>
           {p.archived && <span className="pill archived-pill">Archiviert</span>}
           <span className="spacer" />
           <button type="button" className="btn small" onClick={() => updateProject({ archived: !p.archived })}>

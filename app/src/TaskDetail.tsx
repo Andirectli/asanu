@@ -4,7 +4,7 @@ import { ApiError, errorText, type Task, type TaskDetail, type TaskPatch } from 
 import { useApp, useServerEvents } from './ctx';
 import { isMod, modKey } from './platform';
 import { DependencyPicker } from './DependencyPicker';
-import { Avatar, CheckCircle, COLORS, DueText, Popover, PRIORITIES, STATUSES } from './ui';
+import { Avatar, CheckCircle, COLORS, DueText, HoverSelect, Popover, PRIORITIES, PriorityPill, STATUSES, StatusPill } from './ui';
 
 type Patch = TaskPatch;
 type Conflict = { patch: Patch; current: Task };
@@ -238,62 +238,51 @@ export function TaskDetailPane({ taskId }: { taskId: number }) {
               </a>
             )}
           </dd>
-          <dt>
-            <label htmlFor="assignee">Verantwortlich</label>
-          </dt>
-          <dd className="row gap">
-            <Avatar user={t.assigneeId ? users.get(t.assigneeId) : undefined} size={24} />
-            <select id="assignee" value={t.assigneeId ?? 0} onChange={(e) => save({ assigneeId: Number(e.target.value) })}>
-              <option value={0}>Niemand</option>
-              {[...users.values()].map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.id === user.id ? `${u.name} (ich)` : u.name}
-                </option>
-              ))}
-            </select>
+          <dt>Verantwortlich</dt>
+          <dd>
+            <HoverSelect
+              label="Verantwortlich"
+              value={t.assigneeId ?? 0}
+              onChange={(v) => save({ assigneeId: Number(v) })}
+              options={[{ value: 0, label: 'Niemand' }, ...[...users.values()].map((u) => ({ value: u.id, label: u.id === user.id ? `${u.name} (ich)` : u.name }))]}
+            >
+              {t.assigneeId ? (
+                <>
+                  <Avatar user={users.get(t.assigneeId)} size={24} />
+                  <span>{users.get(t.assigneeId)?.name}</span>
+                </>
+              ) : (
+                <span className="muted">Niemand</span>
+              )}
+            </HoverSelect>
             {t.assigneeId !== user.id && (
               <button type="button" className="btn link small" onClick={() => save({ assigneeId: user.id })}>
                 Mir zuweisen
               </button>
             )}
           </dd>
-          <dt>
-            <label htmlFor="due">Datum</label>
-          </dt>
-          <dd className="row gap wrap">
+          <dt>Datum</dt>
+          <dd className="date-row">
             <input id="start" type="date" aria-label="Startdatum" value={t.startDate} max={t.dueDate || undefined} onChange={(e) => save({ startDate: e.target.value })} />
             <span className="muted">–</span>
             <input id="due" type="date" aria-label="Fälligkeitsdatum" value={t.dueDate} min={t.startDate || undefined} onChange={(e) => save({ dueDate: e.target.value })} />
-            <DueText t={t} />
             {(t.dueDate || t.startDate) && (
               <button type="button" className="icon-btn" aria-label="Datum entfernen" onClick={() => save({ dueDate: '', startDate: '' })}>
                 <BsX />
               </button>
             )}
           </dd>
-          <dt>
-            <label htmlFor="prio">Priorität</label>
-          </dt>
+          <dt>Priorität</dt>
           <dd>
-            <select id="prio" value={t.priority} onChange={(e) => save({ priority: e.target.value as Task['priority'] })}>
-              {PRIORITIES.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+            <HoverSelect label="Priorität" value={t.priority} onChange={(v) => save({ priority: v as Task['priority'] })} options={PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}>
+              {t.priority ? <PriorityPill p={t.priority} /> : <span className="muted">—</span>}
+            </HoverSelect>
           </dd>
-          <dt>
-            <label htmlFor="status">Status</label>
-          </dt>
+          <dt>Status</dt>
           <dd>
-            <select id="status" className={t.status ? `status-select status-${t.status}` : ''} value={t.status} onChange={(e) => save({ status: e.target.value as Task['status'] })}>
-              {STATUSES.map((x) => (
-                <option key={x.value} value={x.value}>
-                  {x.label}
-                </option>
-              ))}
-            </select>
+            <HoverSelect label="Status" value={t.status} onChange={(v) => save({ status: v as Task['status'] })} options={STATUSES.map((x) => ({ value: x.value, label: x.label }))}>
+              {t.status ? <StatusPill s={t.status} /> : <span className="muted">—</span>}
+            </HoverSelect>
           </dd>
           <dt>Labels</dt>
           <dd className="row gap wrap anchor">

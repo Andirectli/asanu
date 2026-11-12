@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { BsCheck } from 'react-icons/bs';
-import type { Label, Priority, Status, Task, User } from './api';
+import type { IconType } from 'react-icons';
+import { BsAirplane, BsBarChart, BsBook, BsBriefcase, BsBug, BsCalendar3, BsCart, BsCheck, BsHeart, BsHouse, BsKanban, BsListUl, BsPeople, BsReverseLayoutTextSidebarReverse, BsRocketTakeoff, BsStar, BsTools } from 'react-icons/bs';
+import type { Label, Priority, ProjectStatus, Status, Task, User } from './api';
 
 // Asana project palette, same set the clone seeds as project base colors.
 export const COLORS: { name: string; hex: string }[] = [
@@ -35,6 +36,46 @@ export const STATUSES: { value: Status; label: string }[] = [
   { value: 'off_track', label: 'Unplanmäßig' },
 ];
 
+/** Project status values (Asana): the task field only knows the first three. */
+export const PROJECT_STATUSES: { value: ProjectStatus; label: string }[] = [
+  { value: 'on_track', label: 'Planmäßig' },
+  { value: 'at_risk', label: 'Gefährdet' },
+  { value: 'off_track', label: 'Unplanmäßig' },
+  { value: 'on_hold', label: 'Zurückgestellt' },
+  { value: 'complete', label: 'Erledigt' },
+  { value: 'dropped', label: 'Verworfen' },
+];
+export const projectStatusLabel = (s: ProjectStatus) => PROJECT_STATUSES.find((x) => x.value === s)?.label ?? '';
+
+export const PROJECT_ICONS: { key: string; label: string; Icon: IconType }[] = [
+  { key: 'list', label: 'Liste', Icon: BsListUl },
+  { key: 'board', label: 'Board', Icon: BsKanban },
+  { key: 'timeline', label: 'Zeitleiste', Icon: BsReverseLayoutTextSidebarReverse },
+  { key: 'calendar', label: 'Kalender', Icon: BsCalendar3 },
+  { key: 'rocket', label: 'Rakete', Icon: BsRocketTakeoff },
+  { key: 'people', label: 'Menschen', Icon: BsPeople },
+  { key: 'chart', label: 'Diagramm', Icon: BsBarChart },
+  { key: 'home', label: 'Haus', Icon: BsHouse },
+  { key: 'cart', label: 'Einkauf', Icon: BsCart },
+  { key: 'plane', label: 'Reise', Icon: BsAirplane },
+  { key: 'book', label: 'Buch', Icon: BsBook },
+  { key: 'briefcase', label: 'Arbeit', Icon: BsBriefcase },
+  { key: 'heart', label: 'Herz', Icon: BsHeart },
+  { key: 'star', label: 'Stern', Icon: BsStar },
+  { key: 'tools', label: 'Werkzeug', Icon: BsTools },
+  { key: 'bug', label: 'Fehler', Icon: BsBug },
+];
+
+/** Coloured rounded square with the project's icon (sidebar, header, tiles). */
+export function ProjectIcon({ icon, color, size = 24 }: { icon: string; color: string; size?: number }) {
+  const Icon = PROJECT_ICONS.find((i) => i.key === icon)?.Icon ?? BsListUl;
+  return (
+    <span className="project-icon-sq" style={{ background: color, width: size, height: size, flexBasis: size, borderRadius: Math.round(size / 4) }}>
+      <Icon color="#fff" size={Math.round(size * 0.6)} />
+    </span>
+  );
+}
+
 export function StatusPill({ s }: { s: Status }) {
   if (!s) return null;
   return <span className={`pill status-${s}`}>{STATUSES.find((x) => x.value === s)?.label}</span>;
@@ -47,6 +88,22 @@ export function Avatar({ user, size = 24 }: { user: User | undefined; size?: num
   return (
     <span className="avatar" title={user.name} style={{ width: size, height: size, flexBasis: size, fontSize: size * 0.4, background: AVATAR_COLORS[user.id % AVATAR_COLORS.length] }}>
       {user.name.slice(0, 2).toUpperCase()}
+    </span>
+  );
+}
+
+/** Looks like plain text or a chip; a transparent native <select> on top does the work. Grey background only on hover (Asana style). */
+export function HoverSelect({ value, options, onChange, label, children }: { value: string | number; options: { value: string | number; label: string }[]; onChange: (v: string) => void; label: string; children: React.ReactNode }) {
+  return (
+    <span className="hover-select">
+      <span className="hs-face">{children}</span>
+      <select value={value} aria-label={label} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
     </span>
   );
 }
@@ -216,6 +273,18 @@ export function Popover({ open, onClose, children, align = 'left' }: { open: boo
   return (
     <div ref={ref} className={`popover ${align}`} role="dialog">
       {children}
+    </div>
+  );
+}
+
+export function IconGrid({ value, onPick }: { value: string; onPick: (key: string) => void }) {
+  return (
+    <div className="icon-grid">
+      {PROJECT_ICONS.map(({ key, label, Icon }) => (
+        <button key={key} type="button" title={label} aria-label={label} aria-pressed={key === value} className={`icon-cell ${key === value ? 'on' : ''}`} onClick={() => onPick(key)}>
+          <Icon />
+        </button>
+      ))}
     </div>
   );
 }

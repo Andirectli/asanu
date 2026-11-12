@@ -563,3 +563,73 @@ func TestUpdateWithoutSidecarIs404(t *testing.T) {
 		t.Fatal("updater must not be advertised")
 	}
 }
+
+func TestProjectIconFavoritesAndExtraStatuses(t *testing.T) {
+	srv, stop := setup(t, filepath.Join(t.TempDir(), "asanu.db"))
+	defer stop()
+	c := &client{t: t, base: srv.URL}
+	c.login("me@home.lan", "correct-horse-1")
+	var p Project
+	c.do("POST", "/api/projects", map[string]string{"name": "P", "color": "#4573d2"}, &p)
+	if p.Icon != "list" || p.Favorite {
+		t.Fatalf("defaults: %+v", p)
+	}
+	var d Project
+	if code := c.do("PATCH", fmt.Sprintf("/api/projects/%d", p.ID), map[string]any{"version": p.Version, "icon": "rocket"}, &d); code != 200 || d.Icon != "rocket" {
+		t.Fatalf("icon: %d %+v", code, d)
+	}
+	if code := c.do("PATCH", fmt.Sprintf("/api/projects/%d", p.ID), map[string]any{"version": d.Version, "icon": "<script>"}, nil); code != 400 {
+		t.Fatalf("bad icon accepted: %d", code)
+	}
+	for _, st := range []string{"on_hold", "complete", "dropped", "on_track"} {
+		if code := c.do("POST", fmt.Sprintf("/api/projects/%d/updates", p.ID), map[string]string{"status": st}, nil); code != 201 {
+			t.Fatalf("project status %s: %d", st, code)
+		}
+	}
+	// favourites are per user
+	if code := c.do("PUT", fmt.Sprintf("/api/projects/%d/favorite", p.ID), nil, nil); code != 204 {
+		t.Fatalf("favorite: %d", code)
+	}
+	var ps []Project
+	c.do("GET", "/api/projects", nil, &ps)
+	if !ps[0].Favorite {
+		t.Fatal("favourite not listed")
+	}
+	var b struct{ Project Project }
+	c.do("GET", fmt.Sprintf("/api/projects/%d/board", p.ID), nil, &b)
+	if !b.Project.Favorite {
+		t.Fatal("board must carry favourite flag")
+	}
+	c.do("DELETE", fmt.Sprintf("/api/projects/%d/favorite", p.ID), nil, nil)
+	c.do("GET", "/api/projects", nil, &ps)
+	if ps[0].Favorite {
+		t.Fatal("favourite not removed")
+	}
+	// task status keeps its three values
+	var task Task
+	var board struct{ Sections []Section }
+	c.do("GET", fmt.Sprintf("/api/projects/%d/board", p.ID), nil, &board)
+	c.do("POST", "/api/tasks", map[string]any{"projectId": p.ID, "sectionId": board.Sections[0].ID, "title": "x"}, &task)
+	if code := c.do("PATCH", fmt.Sprintf("/api/tasks/%d", task.ID), map[string]any{"version": task.Version, "status": "on_hold"}, nil); code != 400 {
+		t.Fatalf("task status must reject project-only values: %d", code)
+	}
+}
+
+// every method the API routes use must pass the browser preflight, or the app fails with "server unreachable"
+func TestCORSPreflightAllowsEveryUsedMethod(t *testing.T) {
+	srv, stop := setup(t, filepath.Join(t.TempDir(), "asanu.db"))
+	defer stop()
+	for _, m := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
+		req, _ := http.NewRequest("OPTIONS", srv.URL+"/api/projects/1/favorite", nil)
+		req.Header.Set("Origin", "tauri://localhost")
+		req.Header.Set("Access-Control-Request-Method", m)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if allowed := res.Header.Get("Access-Control-Allow-Methods"); res.StatusCode != 204 || !strings.Contains(allowed, m) {
+			t.Fatalf("preflight for %s: %d %q", m, res.StatusCode, allowed)
+		}
+	}
+}

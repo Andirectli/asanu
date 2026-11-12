@@ -1,9 +1,10 @@
 export type User = { id: number; email: string; name: string };
-export type Project = { id: number; name: string; color: string; archived: boolean; position: number; version: number; description: string; status: Status; createdAt: string; openTasks: number; dueSoon: number };
-export type ProjectUpdate = { id: number; projectId: number; userId: number; userName: string; status: Status; body: string; createdAt: string };
+export type Project = { id: number; name: string; color: string; archived: boolean; position: number; version: number; description: string; icon: string; favorite: boolean; status: ProjectStatus; createdAt: string; openTasks: number; dueSoon: number };
+export type ProjectUpdate = { id: number; projectId: number; userId: number; userName: string; status: ProjectStatus; body: string; createdAt: string };
 export type Section = { id: number; projectId: number; name: string; position: number; version: number };
 export type Priority = '' | 'low' | 'medium' | 'high';
 export type Status = '' | 'on_track' | 'at_risk' | 'off_track';
+export type ProjectStatus = Status | 'on_hold' | 'complete' | 'dropped';
 export type MySection = '' | 'today' | 'next_week' | 'later';
 export type Task = {
   id: number;
@@ -105,10 +106,11 @@ export class Api {
   me = () => this.req<User>('GET', '/api/me');
   projects = () => this.req<Project[]>('GET', '/api/projects');
   createProject = (name: string, color: string) => this.req<Project>('POST', '/api/projects', { name, color });
-  updateProject = (p: Project, patch: Partial<Pick<Project, 'name' | 'color' | 'archived' | 'description'>>) =>
+  updateProject = (p: Project, patch: Partial<Pick<Project, 'name' | 'color' | 'archived' | 'description' | 'icon'>>) =>
     this.req<Project>('PATCH', `/api/projects/${p.id}`, { version: p.version, ...patch });
+  setFavorite = (id: number, on: boolean) => this.req<void>(on ? 'PUT' : 'DELETE', `/api/projects/${id}/favorite`);
   updates = (id: number) => this.req<ProjectUpdate[]>('GET', `/api/projects/${id}/updates`);
-  addUpdate = (id: number, status: Status, body: string) => this.req<ProjectUpdate>('POST', `/api/projects/${id}/updates`, { status, body });
+  addUpdate = (id: number, status: ProjectStatus, body: string) => this.req<ProjectUpdate>('POST', `/api/projects/${id}/updates`, { status, body });
   board = (id: number, signal?: AbortSignal) => this.req<Board>('GET', `/api/projects/${id}/board`, undefined, signal);
   createSection = (projectId: number, name: string) => this.req<Section>('POST', `/api/projects/${projectId}/sections`, { name });
   updateSection = (s: Section, name: string) => this.req<Section>('PATCH', `/api/sections/${s.id}`, { version: s.version, name });

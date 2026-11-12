@@ -53,6 +53,8 @@ func (a *API) routes() http.Handler {
 	m.HandleFunc("POST /api/projects", a.authed(a.createProject))
 	m.HandleFunc("PATCH /api/projects/{id}", a.authed(a.updateProject))
 	m.HandleFunc("GET /api/projects/{id}/board", a.authed(a.board))
+	m.HandleFunc("PUT /api/projects/{id}/favorite", a.authed(a.setFavorite(true)))
+	m.HandleFunc("DELETE /api/projects/{id}/favorite", a.authed(a.setFavorite(false)))
 	m.HandleFunc("GET /api/projects/{id}/updates", a.authed(a.listUpdates))
 	m.HandleFunc("POST /api/projects/{id}/updates", a.authed(a.createUpdate))
 	m.HandleFunc("POST /api/projects/{id}/sections", a.authed(a.createSection))
@@ -82,7 +84,7 @@ func (a *API) cors(h http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", o)
 			w.Header().Set("Vary", "Origin")
 			if r.Method == http.MethodOptions {
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")
 				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 				w.Header().Set("Access-Control-Max-Age", "600")
 				w.WriteHeader(204)
@@ -157,6 +159,10 @@ func validDate(s string) bool {
 }
 
 var priorities = map[string]bool{"": true, "low": true, "medium": true, "high": true}
+
+// project status updates know three more states than the task status field (same as Asana)
+var projectStatuses = map[string]bool{"on_track": true, "at_risk": true, "off_track": true, "on_hold": true, "complete": true, "dropped": true}
+var projectIcons = map[string]bool{"list": true, "board": true, "timeline": true, "calendar": true, "rocket": true, "people": true, "chart": true, "home": true, "cart": true, "plane": true, "book": true, "briefcase": true, "heart": true, "star": true, "tools": true, "bug": true}
 var statuses = map[string]bool{"": true, "on_track": true, "at_risk": true, "off_track": true}
 var mySections = map[string]bool{"": true, "today": true, "next_week": true, "later": true}
 
@@ -210,17 +216,19 @@ type Project struct {
 	Position    float64 `json:"position"`
 	Version     int64   `json:"version"`
 	Description string  `json:"description"`
-	Status      string  `json:"status"` // status of the latest update, "" if none
+	Icon        string  `json:"icon"`
+	Favorite    bool    `json:"favorite"` // for the calling user
+	Status      string  `json:"status"`   // status of the latest update, "" if none
 	CreatedAt   string  `json:"createdAt"`
 	OpenTasks   int     `json:"openTasks"` // only filled by the project list
 	DueSoon     int     `json:"dueSoon"`   // open tasks due within 7 days (incl. overdue)
 }
 
-const projectCols = `id,name,color,archived,position,version,description,created_at,
+const projectCols = `id,name,color,archived,position,version,description,icon,created_at,
 	COALESCE((SELECT u.status FROM project_updates u WHERE u.project_id=projects.id ORDER BY u.id DESC LIMIT 1),'')`
 
 func scanProject(s interface{ Scan(...any) error }) (p Project, err error) {
-	err = s.Scan(&p.ID, &p.Name, &p.Color, &p.Archived, &p.Position, &p.Version, &p.Description, &p.CreatedAt, &p.Status)
+	err = s.Scan(&p.ID, &p.Name, &p.Color, &p.Archived, &p.Position, &p.Version, &p.Description, &p.Icon, &p.CreatedAt, &p.Status)
 	return
 }
 
@@ -243,14 +251,16 @@ func (a *API) listProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
+	favs := a.favorites(userFrom(r).ID)
 	out := []Project{}
 	for rows.Next() {
 		var p Project
-		err := rows.Scan(&p.ID, &p.Name, &p.Color, &p.Archived, &p.Position, &p.Version, &p.Description, &p.CreatedAt, &p.Status, &p.OpenTasks, &p.DueSoon)
+		err := rows.Scan(&p.ID, &p.Name, &p.Color, &p.Archived, &p.Position, &p.Version, &p.Description, &p.Icon, &p.CreatedAt, &p.Status, &p.OpenTasks, &p.DueSoon)
 		if err != nil {
 			serverError(w, err)
 			return
 		}
+		p.Favorite = favs[p.ID]
 		out = append(out, p)
 	}
 	if err := rows.Err(); err != nil {
@@ -337,6 +347,7 @@ func (a *API) updateProject(w http.ResponseWriter, r *http.Request) {
 		Color       *string
 		Archived    *bool
 		Description *string
+		Icon        *string
 	}
 	if !decode(w, r, &in) {
 		return
@@ -360,6 +371,13 @@ func (a *API) updateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Archived != nil {
 		sets, args = append(sets, "archived=?"), append(args, *in.Archived)
+	}
+	if in.Icon != nil {
+		if !projectIcons[*in.Icon] {
+			fail(w, 400, "unknown icon")
+			return
+		}
+		sets, args = append(sets, "icon=?"), append(args, *in.Icon)
 	}
 	if in.Description != nil {
 		if utf8.RuneCountInString(*in.Description) > 20000 {
@@ -675,6 +693,7 @@ func (a *API) board(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	p.Favorite = a.favorites(userFrom(r).ID)[p.ID]
 	writeJSON(w, 200, map[string]any{"project": p, "sections": sections, "tasks": tasks})
 }
 
@@ -1272,8 +1291,8 @@ func (a *API) createUpdate(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	if in.Status == "" || !statuses[in.Status] {
-		fail(w, 400, "status must be on_track, at_risk or off_track")
+	if !projectStatuses[in.Status] {
+		fail(w, 400, "status must be on_track, at_risk, off_track, on_hold, complete or dropped")
 		return
 	}
 	body, err := text("body", in.Body, 0, 10000)
@@ -1320,4 +1339,43 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		log.Printf("update request answered with %d", res.StatusCode)
 	}()
 	writeJSON(w, 202, map[string]any{"started": true, "version": appVersion})
+}
+
+// ---- favourites (per user) ----
+
+func (a *API) favorites(userID int64) map[int64]bool {
+	out := map[int64]bool{}
+	rows, err := a.db.Query(`SELECT project_id FROM favorites WHERE user_id=?`, userID)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		if rows.Scan(&id) == nil {
+			out[id] = true
+		}
+	}
+	return out
+}
+
+func (a *API) setFavorite(on bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		u := userFrom(r)
+		var err error
+		if on {
+			_, err = a.db.Exec(`INSERT OR IGNORE INTO favorites(user_id,project_id) SELECT ?,id FROM projects WHERE id=?`, u.ID, id)
+		} else {
+			_, err = a.db.Exec(`DELETE FROM favorites WHERE user_id=? AND project_id=?`, u.ID, id)
+		}
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+		w.WriteHeader(204)
+	}
 }

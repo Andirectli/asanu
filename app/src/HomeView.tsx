@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BsCheck2, BsListUl, BsPlus } from 'react-icons/bs';
+import { BsCheck2, BsPlus } from 'react-icons/bs';
 import type { Task } from './api';
 import { useApp, useServerEvents } from './ctx';
-import { Avatar, CheckCircle, COLORS, DueText, dueState } from './ui';
+import { Avatar, CheckCircle, COLORS, DueText, dueState, ProjectIcon } from './ui';
 
 type Tab = 'upcoming' | 'overdue' | 'done';
 
@@ -12,6 +12,7 @@ export function HomeView() {
   const [done, setDone] = useState<Task[]>([]);
   const [tab, setTab] = useState<Tab>('upcoming');
   const [newProject, setNewProject] = useState<string | null>(null);
+  const [period, setPeriod] = useState<'week' | 'month'>(() => (localStorage.getItem('asanu-home-period') as 'week' | 'month') || 'week');
 
   const load = useCallback(async () => {
     try {
@@ -32,10 +33,11 @@ export function HomeView() {
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-  weekStart.setHours(0, 0, 0, 0);
-  const doneThisWeek = done.filter((t) => new Date(t.completedAt) >= weekStart).length;
+  const periodStart = new Date(now);
+  if (period === 'week') periodStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  else periodStart.setDate(1);
+  periodStart.setHours(0, 0, 0, 0);
+  const doneInPeriod = done.filter((t) => new Date(t.completedAt) >= periodStart).length;
   const list = tab === 'done' ? done.slice(0, 30) : open.filter((t) => (tab === 'overdue' ? dueState(t) === 'overdue' : dueState(t) !== 'overdue'));
   const active = projects.filter((p) => !p.archived);
 
@@ -58,7 +60,26 @@ export function HomeView() {
         </h1>
         <div className="home-stats">
           <span>
-            <BsCheck2 /> {doneThisWeek} {doneThisWeek === 1 ? 'Aufgabe' : 'Aufgaben'} diese Woche erledigt
+            <BsCheck2 /> {doneInPeriod} {doneInPeriod === 1 ? 'Aufgabe' : 'Aufgaben'} erledigt
+          </span>
+          <span className="hover-select">
+            <span className="hs-face">{period === 'week' ? 'Meine Woche' : 'Mein Monat'}</span>
+            <select
+              aria-label="Zeitraum wählen"
+              value={period}
+              onChange={(e) => {
+                const v = e.target.value as 'week' | 'month';
+                setPeriod(v);
+                try {
+                  localStorage.setItem('asanu-home-period', v);
+                } catch {
+                  /* ignore */
+                }
+              }}
+            >
+              <option value="week">Meine Woche</option>
+              <option value="month">Mein Monat</option>
+            </select>
           </span>
           <span>{open.length} offen zugewiesen</span>
         </div>
@@ -150,9 +171,7 @@ export function HomeView() {
             )}
             {active.map((p) => (
               <a key={p.id} href={`#/project/${p.id}/list`} className="project-tile">
-                <span className="tile-icon" style={{ background: p.color }}>
-                  <BsListUl color="#fff" size={20} />
-                </span>
+                <ProjectIcon icon={p.icon} color={p.color} size={44} />
                 <span>
                   <span className="tile-name">{p.name}</span>
                   <span className="muted small">{p.dueSoon ? `${p.dueSoon} bald fällig` : `${p.openTasks} offen`}</span>
