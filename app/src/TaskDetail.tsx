@@ -239,7 +239,7 @@ export function TaskDetailPane({ taskId }: { taskId: number }) {
             )}
           </dd>
           <dt>
-            <label htmlFor="assignee">Zuständig</label>
+            <label htmlFor="assignee">Verantwortlich</label>
           </dt>
           <dd className="row gap">
             <Avatar user={t.assigneeId ? users.get(t.assigneeId) : undefined} size={24} />

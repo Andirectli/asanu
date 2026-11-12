@@ -218,7 +218,7 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
             Board
           </a>
           <a role="tab" aria-selected={view === 'timeline'} className={view === 'timeline' ? 'active' : ''} href={`#/project/${p.id}/timeline`} title={`${modKey}3`}>
-            Timeline
+            Zeitleiste
           </a>
           <a role="tab" aria-selected={view === 'calendar'} className={view === 'calendar' ? 'active' : ''} href={`#/project/${p.id}/calendar`} title={`${modKey}4`}>
             Kalender
@@ -237,7 +237,7 @@ export function ProjectView({ projectId, view }: { projectId: number; view: Proj
         <FilterSelect label="Status" value={filter.status} onChange={(v) => setFilter({ ...filter, status: v as Filter['status'] })} options={[['open', 'Offen'], ['done', 'Erledigt'], ['all', 'Alle']]} />
         <FilterSelect label="Priorität" value={filter.priority} onChange={(v) => setFilter({ ...filter, priority: v })} options={[['', 'Alle'], ...PRIORITIES.filter((x) => x.value).map((x) => [x.value, x.label] as [string, string])]} />
         <FilterSelect label="Label" value={String(filter.label)} onChange={(v) => setFilter({ ...filter, label: Number(v) })} options={[['0', 'Alle'], ...[...labels.values()].map((l) => [String(l.id), l.name] as [string, string])]} />
-        <FilterSelect label="Zuständig" value={filter.assignee} onChange={(v) => setFilter({ ...filter, assignee: v as Filter['assignee'] })} options={[['', 'Alle'], ['me', 'Ich'], ['none', 'Niemand']]} />
+        <FilterSelect label="Verantwortlich" value={filter.assignee} onChange={(v) => setFilter({ ...filter, assignee: v as Filter['assignee'] })} options={[['', 'Alle'], ['me', 'Ich'], ['none', 'Niemand']]} />
         <FilterSelect label="Fällig" value={filter.due} onChange={(v) => setFilter({ ...filter, due: v as Filter['due'] })} options={[['', 'Egal'], ['overdue', 'Überfällig'], ['today', 'Bis heute'], ['week', 'Nächste 7 Tage'], ['none', 'Ohne Datum']]} />
         {(view === 'list' || view === 'board') && (
           <FilterSelect label="Sortieren" value={sort} onChange={(v) => setSort(v as Sort)} options={[['manual', 'Manuell'], ['due', 'Fälligkeit'], ['priority', 'Priorität'], ['title', 'Name']]} />

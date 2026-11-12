@@ -30,9 +30,9 @@ export const PRIORITIES: { value: Priority; label: string }[] = [
 
 export const STATUSES: { value: Status; label: string }[] = [
   { value: '', label: 'Kein Status' },
-  { value: 'on_track', label: 'Im Plan' },
+  { value: 'on_track', label: 'Planmäßig' },
   { value: 'at_risk', label: 'Gefährdet' },
-  { value: 'off_track', label: 'Verzug' },
+  { value: 'off_track', label: 'Unplanmäßig' },
 ];
 
 export function StatusPill({ s }: { s: Status }) {

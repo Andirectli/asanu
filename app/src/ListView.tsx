@@ -11,7 +11,7 @@ export function ListView({ m }: { m: BoardModel }) {
     <div className="list-view">
       <div className="list-head">
         <span className="col-title">Aufgabenname</span>
-        <span>Zuständig</span>
+        <span>Verantwortlich</span>
         <span className="col-due">Fällig</span>
         <span className="col-prio">Priorität</span>
         <span>Status</span>
